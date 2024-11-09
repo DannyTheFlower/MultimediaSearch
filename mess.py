@@ -15,7 +15,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
 import torch
-import easyocr  
+import easyocr
 import re
 import nltk
 from nltk.tokenize import sent_tokenize
@@ -105,7 +105,7 @@ class KeyphrasesResult(BaseModel):
     """
     list_of_keyphrases: List[str]
 
-        
+
 #############################################################################
 
 
@@ -114,9 +114,9 @@ class Embedder:
     EMBEDDER class using TF-IDF for generating embeddings.
 
     Methods:
-        fit(documents): Fits the vectorizer to the provided documents.
         predict(text_piece): Generates an embedding for the given text piece.
     """
+
     def __init__(self):
         self.model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-mpnet-base-v2')
 
@@ -130,7 +130,7 @@ class Embedder:
         Returns:
             EmbeddingResult: The embedding result containing a list of floats.
         """
-        embedding = model.encode(text_piece)
+        embedding = self.model.encode(text_piece)
         return EmbeddingResult(embedding=embedding)
 
 
@@ -141,6 +141,7 @@ class Translator:
     Methods:
         translate(text, src_lang, tgt_lang): Translates text from source to target language.
     """
+
     def __init__(self):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.tokenizer_ruen = AutoTokenizer.from_pretrained('Helsinki-NLP/opus-mt-ru-en')
@@ -168,6 +169,8 @@ class Translator:
         elif (src_lang, tgt_lang) == ('ru', 'en'):
             tokenizer = self.tokenizer_ruen
             model = self.model_ruen
+        else:
+            return ""
         inputs = tokenizer.encode(text, return_tensors="pt", truncation=True).to(self.device)
         outputs = model.generate(inputs, max_length=1024, num_beams=4, early_stopping=True)
         translated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -181,6 +184,7 @@ class OCRModel:
     Methods:
         extract_text(image): Extracts text from a given image.
     """
+
     def __init__(self):
         self.reader = easyocr.Reader(['en', 'ru'], gpu=torch.cuda.is_available())
 
@@ -207,9 +211,10 @@ class Chart2Text:
     Methods:
         extract_text(image): Extracts descriptive text from a chart image.
     """
+
     def __init__(self):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = PaliGemmaForConditionalGeneration.from_pretrained("ahmed-masry/chartgemma", 
+        self.model = PaliGemmaForConditionalGeneration.from_pretrained("ahmed-masry/chartgemma",
                                                                        torch_dtype=torch.float16).to(self.device)
         self.processor = AutoProcessor.from_pretrained("ahmed-masry/chartgemma")
 
@@ -231,13 +236,12 @@ class Chart2Text:
             generate_ids[:, prompt_length:], skip_special_tokens=True, clean_up_tokenization_spaces=False
         )[0]
         return output_text
-    
+
 
 EMBEDDER = Embedder()
 TRANSLATOR = Translator()
 OCR = OCRModel()
 CHART2TEXT = Chart2Text()
-TRANSLATOR = Translator()
 
 STOPWORDS = set(stopwords.words('english') + stopwords.words('russian'))
 LEMMATIZER_EN = WordNetLemmatizer()
@@ -247,20 +251,23 @@ MORPH_RULES = [
     [{"POS": "ADJF", "case": ["nomn", "accs"]}, {"POS": "NOUN", "case": ["nomn", "accs"]}],
     [{"POS": "NOUN", "case": ["nomn", "accs"]}, {"POS": "NOUN", "case": ["gent"]}],
     [{"POS": "NOUN", "case": ["nomn", "accs"]}, {"POS": "ADJF", "case": ["gent"]}, {"POS": "NOUN", "case": ["gent"]}],
-    [{"POS": "ADJF", "case": ["nomn", "accs"]}, {"POS": "ADJF", "case": ["nomn", "accs"]}, {"POS": "NOUN", "case": ["nomn", "accs"]}],
-    [{"POS": "ADJF", "case": ["nomn", "accs"]}, {"POS": "NOUN", "case": ["nomn", "accs"]}, {"POS": "NOUN", "case": ["gent"]}]
+    [{"POS": "ADJF", "case": ["nomn", "accs"]}, {"POS": "ADJF", "case": ["nomn", "accs"]},
+     {"POS": "NOUN", "case": ["nomn", "accs"]}],
+    [{"POS": "ADJF", "case": ["nomn", "accs"]}, {"POS": "NOUN", "case": ["nomn", "accs"]},
+     {"POS": "NOUN", "case": ["gent"]}]
 ]
+
 
 #########################################################################
 
 
 def preprocess_text(
-    text: Optional[str],
-    lang: str = 'en',
-    lowercase: bool = True,
-    clean: bool = True,
-    lemmatize: bool = True,
-    stopwords: Optional[Set[str]] = None
+        text: Optional[str],
+        lang: str = 'en',
+        lowercase: bool = True,
+        clean: bool = True,
+        lemmatize: bool = True,
+        stopwords: Optional[Set[str]] = None
 ) -> str:
     global LEMMATIZER_EN, LEMMATIZER_RU
     """
@@ -303,9 +310,9 @@ def preprocess_text(
 
 
 def extract_keywords_en(
-    text: str,
-    preprocess_afterwards: bool = True,
-    recursive: bool = False
+        text: str,
+        preprocess_afterwards: bool = True,
+        recursive: bool = False
 ) -> List[str]:
     """
     Extracts nouns and noun phrases from English text.
@@ -354,10 +361,10 @@ def extract_keywords_en(
         # If recursive=False, return only the found noun phrases and nouns
         return list(set(noun_phrases))  # Use set for uniqueness
 
-    
+
 def match_morph_rule(
-    text: str,
-    rule: List[Dict[str, Any]]
+        text: str,
+        rule: List[Dict[str, Any]]
 ) -> bool:
     global LEMMATIZER_RU
     """
@@ -383,9 +390,9 @@ def match_morph_rule(
 
 
 def extract_keywords_ru(
-    text: str,
-    remove_stopwords: bool = True,
-    recursive: bool = False
+        text: str,
+        remove_stopwords: bool = True,
+        recursive: bool = False
 ) -> List[str]:
     global MORPH_RULES
     """
@@ -406,7 +413,7 @@ def extract_keywords_ru(
     while i < len(tokens):
         matched = False
         for rule in MORPH_RULES:
-            phrase_tokens = tokens[i:i+len(rule)]
+            phrase_tokens = tokens[i:i + len(rule)]
             if len(phrase_tokens) < len(rule):
                 continue
             phrase = ' '.join(phrase_tokens)
@@ -421,9 +428,9 @@ def extract_keywords_ru(
 
 
 def get_keyphrases_for_text_piece(
-    text_piece: str,
-    language: str,
-    recursive: bool = True
+        text_piece: str,
+        language: str,
+        recursive: bool = True
 ) -> KeyphrasesResult:
     """
     Extracts keyphrases from a text piece.
@@ -514,7 +521,7 @@ def aggregate_keyphrases(keyphrases_list: List[List[str]]) -> List[str]:
     aggregated_keyphrases = []
     for keyphrases in keyphrases_list:
         aggregated_keyphrases.extend(keyphrases)
-    return aggregated_keyphrases
+    return list(set(aggregated_keyphrases))
 
 
 def aggregate_embeddings(embeddings_array: List[List[float]]) -> List[float]:
@@ -522,7 +529,7 @@ def aggregate_embeddings(embeddings_array: List[List[float]]) -> List[float]:
     Aggregates multiple embeddings using mean pooling.
 
     Parameters:
-        embeddings_list (List[List[float]]): A list of embeddings.
+        embeddings_array (List[List[float]]): A list of embeddings.
 
     Returns:
         List[float]: The aggregated embedding.
@@ -582,8 +589,19 @@ def translate(text: str, text_language: str, desired_language: str, translator: 
     else:
         return translator.translate(text, text_language, desired_language)
 
-    
-def split_text_into_chunks(text: str, chunk_size: int=250, overlap: int=10) -> List[str]:
+
+def split_text_into_chunks(text: str, chunk_size: int = 250, overlap: int = 10) -> List[str]:
+    """
+    Splits the text into chunks of specified size with overlap.
+
+    Parameters:
+        text (str): The text to split.
+        chunk_size (int): The maximum number of tokens in each chunk.
+        overlap (int): The number of tokens to overlap between chunks.
+
+    Returns:
+        List[str]: A list of text chunks.
+    """
     tokens = word_tokenize(text)
     total_tokens = len(tokens)
     chunks = []
@@ -597,18 +615,32 @@ def split_text_into_chunks(text: str, chunk_size: int=250, overlap: int=10) -> L
 
 
 def get_text_pieces_from_txt_file(
-    filepath: str,
-    chunk_size: int = 250,
-    overlap: int = 15
+        filepath: str,
+        chunk_size: int = 250,
+        overlap: int = 15
 ) -> List[str]:
+    """
+    Extracts text pieces from a TXT file, splitting it into chunks.
+
+    Parameters:
+        filepath (str): The path to the TXT file.
+        chunk_size (int): The maximum number of tokens in each chunk.
+        overlap (int): The number of tokens to overlap between chunks.
+
+    Returns:
+        List[str]: A list of text chunks.
+    """
     with open(filepath, 'r', encoding='utf-8') as f:
         text = f.read()
     chunks = split_text_into_chunks(text, chunk_size, overlap)
     return chunks
 
 
-def get_text_pieces_from_pdf_file(filepath: str, index_in_two_languages: bool, too_few_chars=250) -> Dict[str, List[str]]:
-    global EMBEDDER, TRANSLATOR, OCR, CHART2TEXT
+def get_text_pieces_from_pdf_file(
+        filepath: str,
+        index_in_two_languages: bool,
+        too_few_chars: int = 250
+) -> Dict[str, List[str]]:
     """
     Extracts text pieces from a PDF file, handling pages with too few characters by using OCR or CHART2TEXT.
 
@@ -620,6 +652,8 @@ def get_text_pieces_from_pdf_file(filepath: str, index_in_two_languages: bool, t
     Returns:
         Dict[str, List[str]]: Dictionary containing text pieces in 'en' and/or 'ru'.
     """
+    global EMBEDDER, TRANSLATOR, OCR, CHART2TEXT
+
     doc = fitz.open(filepath)
     text_pieces_en = []
     text_pieces_ru = []
@@ -634,10 +668,10 @@ def get_text_pieces_from_pdf_file(filepath: str, index_in_two_languages: bool, t
     for page_number, page in enumerate(doc):
         chart2text_was_used = False
         page_text = page.get_text()
-        if len(page_text.strip()) < too_few_chars and page_number not in [0, len(doc)-1]:
+        if len(page_text.strip()) < too_few_chars and page_number not in [0, len(doc) - 1]:
             # Use OCR for text extraction if too few characters
             pix = page.get_pixmap(dpi=300)
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
             page_text = ocr.extract_text(img)
             if len(page_text.strip()) < too_few_chars:
                 # Use CHART2TEXT if still too few characters
@@ -670,15 +704,27 @@ def get_text_pieces_from_pdf_file(filepath: str, index_in_two_languages: bool, t
     return result
 
 
-def index_file(filepath: str, index_in_two_languages=True):
-    global EMBEDDER, TRANSLATOR
+def index_file(
+        filepath: str,
+        index_in_two_languages: bool = True,
+        too_few_chars: int = 250,
+        chunk_size: int = 250,
+        overlap: int = 15,
+        recursive_keyphrases: bool = True
+):
     """
     Main function to index a file (TXT or PDF). Processes text pieces, extracts keyphrases, embeddings, and writes data to CSV.
 
     Parameters:
         filepath (str): The path to the file to index.
         index_in_two_languages (bool): Whether to index the file in two languages.
+        too_few_chars (int): Threshold for minimal acceptable characters in extracted text.
+        chunk_size (int): The maximum number of tokens in each chunk for txt-file processing.
+        overlap (int): The number of tokens to overlap between chunks for txt-file processing.
+        recursive_keyphrases (bool): Flag to recursive keyphrases extraction.
     """
+    global EMBEDDER, TRANSLATOR
+
     filename = os.path.basename(filepath)
     extension = get_file_extension(filename)
     embedder = EMBEDDER
@@ -690,13 +736,13 @@ def index_file(filepath: str, index_in_two_languages=True):
 
     if extension == '.txt':
         # Processing TXT files
-        text_pieces = get_text_pieces_from_txt_file(filepath)
+        text_pieces = get_text_pieces_from_txt_file(filepath, chunk_size, overlap)
         language_result = detect_language(text_pieces[0])
         language = language_result.language or 'en'
         if index_in_two_languages:
             for idx, text_piece in enumerate(text_pieces):
                 # Extract keyphrases and embeddings for original language
-                keyphrases_result = get_keyphrases_for_text_piece(text_piece, language)
+                keyphrases_result = get_keyphrases_for_text_piece(text_piece, language, recursive_keyphrases)
                 embedding_result = get_embedding_for_text_piece(text_piece, embedder)
                 csv_row = CSVRow(
                     is_for_whole_file=False,
@@ -717,7 +763,7 @@ def index_file(filepath: str, index_in_two_languages=True):
                 # Process translation
                 desired_language = 'ru' if language == 'en' else 'en'
                 translated_text = translate(text_piece, language, desired_language, translator)
-                keyphrases_result_trans = get_keyphrases_for_text_piece(translated_text, desired_language)
+                keyphrases_result_trans = get_keyphrases_for_text_piece(translated_text, desired_language, recursive_keyphrases)
                 embedding_result_trans = get_embedding_for_text_piece(translated_text, embedder)
                 csv_row_trans = CSVRow(
                     is_for_whole_file=False,
@@ -738,7 +784,7 @@ def index_file(filepath: str, index_in_two_languages=True):
         else:
             # Indexing in one language
             for idx, text_piece in enumerate(text_pieces):
-                keyphrases_result = get_keyphrases_for_text_piece(text_piece, language)
+                keyphrases_result = get_keyphrases_for_text_piece(text_piece, language, recursive_keyphrases)
                 embedding_result = get_embedding_for_text_piece(text_piece, embedder)
                 csv_row = CSVRow(
                     is_for_whole_file=False,
@@ -785,11 +831,11 @@ def index_file(filepath: str, index_in_two_languages=True):
             write_data_to_csv(csv_row)
     elif extension == '.pdf':
         # Processing PDF files
-        text_pieces_dict = get_text_pieces_from_pdf_file(filepath, index_in_two_languages)
+        text_pieces_dict = get_text_pieces_from_pdf_file(filepath, index_in_two_languages, too_few_chars)
         if 'en' in text_pieces_dict:
             text_pieces_en = text_pieces_dict['en']
             for idx, text_piece in enumerate(text_pieces_en):
-                keyphrases_result = get_keyphrases_for_text_piece(text_piece, 'en')
+                keyphrases_result = get_keyphrases_for_text_piece(text_piece, 'en', recursive_keyphrases)
                 embedding_result = get_embedding_for_text_piece(text_piece, embedder)
                 csv_row = CSVRow(
                     is_for_whole_file=False,
@@ -818,7 +864,7 @@ def index_file(filepath: str, index_in_two_languages=True):
         if 'ru' in text_pieces_dict:
             text_pieces_ru = text_pieces_dict['ru']
             for idx, text_piece in enumerate(text_pieces_ru):
-                keyphrases_result = get_keyphrases_for_text_piece(text_piece, 'ru')
+                keyphrases_result = get_keyphrases_for_text_piece(text_piece, 'ru', recursive_keyphrases)
                 embedding_result = get_embedding_for_text_piece(text_piece, embedder)
                 csv_row = CSVRow(
                     is_for_whole_file=False,
