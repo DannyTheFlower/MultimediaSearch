@@ -191,5 +191,5 @@ def index_filepaths(filepaths):
         upload_filedata_to_csv_file(filepath)
     
     shutil.rmtree('index')  # create new index
-    retrieval_init_all(save_index_path='index/index.pkl')
+    retrieval_init_all(save_index_path='index.faiss')
     

@@ -2,6 +2,8 @@ import streamlit as st
 import time
 import os
 
+from backend.files_processing import index_filepaths
+
 if "INDEXING" not in st.session_state:
     st.session_state["INDEXING"] = False
 if "UPLOAD_FOLDER" not in st.session_state:
@@ -32,8 +34,7 @@ if uploaded_files:
                         f.write(file.getbuffer())
                     processed_files.append(file.name)
                 return processed_files
-
-            processed_files = upload_files(uploaded_files)
+            processed_files.extend(upload_files(uploaded_files))
 
 if st.session_state["INDEXING"]:
     st.warning("Индексация уже запущена. Пожалуйста, подождите завершения текущей индексации.")
@@ -42,7 +43,8 @@ elif st.button("Запустить индексацию"):
     st.session_state["INDEXING"] = True
 
     try:
-        time.sleep(2)
+        with st.spinner("Идёт индексация..."):
+            index_filepaths(processed_files)
 
         for file in os.listdir(st.session_state["UPLOAD_FOLDER"]):
             src = os.path.join(st.session_state["UPLOAD_FOLDER"], file)
@@ -57,6 +59,7 @@ elif st.button("Запустить индексацию"):
 
             os.rename(src, dst)
 
+        processed_files = []
         st.success("Индексация завершена.")
     except Exception as e:
         st.error(f"Ошибка при индексации: {e}")

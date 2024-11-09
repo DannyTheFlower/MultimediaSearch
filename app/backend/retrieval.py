@@ -1,8 +1,7 @@
-import faiss
 import pandas as pd
 import numpy as np
-import pickle
 from sentence_transformers import SentenceTransformer
+import faiss
 
 
 DATA = None
@@ -15,16 +14,14 @@ def init_all(data_path='app/backend/indexed_data.csv', embedder_name='sergeyzh/r
     DATA = pd.read_csv(data_path)
     EMBEDDER = SentenceTransformer(embedder_name)
     if index_path is None:
-        embeddings = EMBEDDER.encode(DATA['text'].values, convert_to_numpy=True)
+        embeddings = EMBEDDER.encode(DATA['text'].values, convert_to_numpy=True, batch_size=16)
         INDEX = faiss.IndexFlatIP(embeddings.shape[1])
         embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
         INDEX.add(embeddings.astype(np.float32))
         if save_index_path:
-            with open(save_index_path, 'wb') as f:
-                pickle.dump(INDEX, f)
+            faiss.write_index(INDEX, save_index_path)
     else:
-        with open(index_path, 'rb') as f:
-            INDEX = pickle.load(f)
+        INDEX = faiss.read_index(index_path)
         
 
 def find_similar_neighbors(query, k=3):
