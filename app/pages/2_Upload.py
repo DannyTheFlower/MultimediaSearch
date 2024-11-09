@@ -2,7 +2,8 @@ import streamlit as st
 import time
 import os
 
-from backend.files_processing import index_filepaths
+from backend.files_processing import upload_filedata_to_csv_file
+from backend.retrieval import index_new_data
 
 if "INDEXING" not in st.session_state:
     st.session_state["INDEXING"] = False
@@ -30,8 +31,10 @@ if uploaded_files:
                 processed_files = []
                 for file in files:
                     file_path = os.path.join(st.session_state['UPLOAD_FOLDER'], file.name)
+                    # Here is necessary to track the same filenames
                     with open(file_path, "wb") as f:
                         f.write(file.getbuffer())
+                    upload_filedata_to_csv_file(file_path)
                     processed_files.append(file.name)
                 return processed_files
             processed_files.extend(upload_files(uploaded_files))
@@ -44,7 +47,7 @@ elif st.button("Запустить индексацию"):
 
     try:
         with st.spinner("Идёт индексация..."):
-            index_filepaths(processed_files)
+            index_new_data()
 
         for file in os.listdir(st.session_state["UPLOAD_FOLDER"]):
             src = os.path.join(st.session_state["UPLOAD_FOLDER"], file)

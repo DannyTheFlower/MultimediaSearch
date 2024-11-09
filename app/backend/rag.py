@@ -1,6 +1,7 @@
 from backend.retrieval import find_similar_neighbors
 from backend.utils import detect_language
 import requests
+import numpy as np
 
 MODEL_NAME = 'b1gjp5vama10h4due384'
 IAM_TOKEN = 't1.9euelZqYnInKi5TJy8_IzpmUnsjHiu3rnpWal5CVnY2ayJXJksaJyY7NnMnl8_c-KkJG-e9iGB1D_t3z935YP0b572IYHUP-zef1656VmpeYnpeLnY_Mx5DJnJDNmcrM7_zF656VmpeYnpeLnY_Mx5DJnJDNmcrM.E2LM94R6WFFPNa6mQGFKXaWgGrliT5Y1O6Rt51Bos2x3PQnTr1g9XZRl9iaw6BSeMgwyy0_KkZIvgkPoeRBuAw'
@@ -59,7 +60,7 @@ def get_answer(query, use_gpt=True, topk_for_rag=3):
     info = []
     texts_for_rag = []
     for row in rows_for_rag:
-        d = {'filename': row.filename, 'info': row.n_slide if row.n_slide is not None else row.text}  # hopefully it works
+        d = {'filename': row.filename, 'info': row.n_slide if not np.isnan(row.n_slide) else row.text}
         info.append(d)
         texts_for_rag.append(row.text)
     answer = get_llm_answer(query, detect_language(query), texts_for_rag) if use_gpt else None

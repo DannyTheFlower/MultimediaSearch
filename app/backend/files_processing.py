@@ -1,23 +1,18 @@
-from utils import get_file_extension
+from backend.utils import get_file_extension
 from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
 from easyocr import Reader
 import os
 import time
 import torch
-import csv 
+import csv
 import numpy as np
 from PIL import Image
-import nltk
-from nltk.tokenize import word_tokenize
 import fitz
-import pandas as pd
-
-nltk.download('punkt', quiet=True)
 
 
 CSV_FILE_PATH = 'indexed_data.csv'
-OCR = None 
-CHART2TEXT = None 
+OCR = None
+CHART2TEXT = None
 
 
 class OCRModel:
@@ -47,12 +42,13 @@ class Chart2Text:
             generate_ids[:, prompt_length:], skip_special_tokens=True, clean_up_tokenization_spaces=False
         )[0]
         return output_text
-    
 
-def init_all():
+
+def init_all(include_chart2text=False):
     global OCR, CHART2TEXT
     OCR = OCRModel()
-    CHART2TEXT = Chart2Text()
+    if include_chart2text:
+        CHART2TEXT = Chart2Text()
 
 
 def get_text_pieces_from_txt_file(
@@ -62,7 +58,7 @@ def get_text_pieces_from_txt_file(
 ):
     with open(filepath, 'r', encoding='utf-8') as f:
         text = f.read()
-    tokens = word_tokenize(text)
+    tokens = text.split()
     total_tokens = len(tokens)
     chunks = []
     start = 0
@@ -88,19 +84,20 @@ def get_text_pieces_from_pdf_file(
             pix = page.get_pixmap(dpi=300)
             img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
             page_text = OCR.extract_text(img)
-            if len(page_text.strip()) < too_few_chars:
+            if len(page_text.strip()) < too_few_chars and CHART2TEXT is not None:
                 # Use CHART2TEXT if still too few characters
                 page_text = CHART2TEXT.extract_text(img)
         text_pieces.append(page_text)
     return text_pieces
 
 
-def write_data_to_csv(data):
+def write_data_to_csv(data, filepath = None):
     global CSV_FILE_PATH
+    filepath = CSV_FILE_PATH if filepath is None else filepath
     while True:
         try:
-            file_exists = os.path.isfile(CSV_FILE_PATH)
-            with open(CSV_FILE_PATH, mode='a', newline='', encoding='utf-8') as csvfile:
+            file_exists = os.path.isfile(filepath)
+            with open(filepath, mode='a', newline='', encoding='utf-8') as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=['filename', 'n_slide', 'text'])
                 if not file_exists:
                     writer.writeheader()
@@ -113,23 +110,23 @@ def write_data_to_csv(data):
         except IOError:
             time.sleep(1)
             continue
-            
+
 
 def upload_filedata_to_csv_file(
-        filepath: str,
+        filepath_from: str,
+        filepath_to: str = "app/backend/temp_data.csv",
         too_few_chars: int = 50,
         chunk_size: int = 250,
         overlap: int = 10,
 ):
-    filename = os.path.basename(filepath)
+    filename = os.path.basename(filepath_from)
     extension = get_file_extension(filename)
     if extension == '.txt':
-        text_pieces = get_text_pieces_from_txt_file(filepath, chunk_size, overlap)
+        text_pieces = get_text_pieces_from_txt_file(filepath_from, chunk_size, overlap)
     elif extension == '.pdf':
-        text_pieces = get_text_pieces_from_pdf_file(filepath, too_few_chars)
+        text_pieces = get_text_pieces_from_pdf_file(filepath_from, too_few_chars)
     else:
         raise ValueError('Unsupported file extension')
     for idx, text_piece in enumerate(text_pieces):
-            csv_row = {'filename': filename, 'n_slide': None, 'text': text_piece}
-            write_data_to_csv(csv_row)
-            
+        csv_row = {'filename': filename, 'n_slide': None, 'text': text_piece}
+        write_data_to_csv(csv_row, filepath_to)
