@@ -1,0 +1,13 @@
+pydantic 
+numpy 
+pandas 
+PyMuPDF 
+Pillow 
+opencv-python 
+langdetect 
+scikit-learn 
+transformers 
+torch 
+easyocr[ru] 
+pymorphy2
+streamlit
