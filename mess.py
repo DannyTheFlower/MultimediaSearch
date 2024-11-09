@@ -41,8 +41,7 @@ nlp = load('en_core_web_sm')
 # !cp -rf /usr/share/nltk_data/corpora/wordnet2022 /usr/share/nltk_data/corpora/wordnet # temp fix for lookup error.
 
 
-csv_file_path = 'global.csv'
-csv_lock = threading.Lock()
+CSV_FILE_PATH = 'global.csv'
 
 
 class CSVRow(BaseModel):
@@ -172,7 +171,7 @@ class Translator:
         else:
             return ""
         inputs = tokenizer.encode(text, return_tensors="pt", truncation=True).to(self.device)
-        outputs = model.generate(inputs, max_length=1024, num_beams=4, early_stopping=True)
+        outputs = model.generate(inputs, max_length=512, num_beams=4, early_stopping=True)
         translated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
         return translated_text
 
@@ -424,7 +423,7 @@ def extract_keywords_ru(
                     i += len(rule) - 1
                 break
         i += 1
-    return terms
+    return list(set(terms))
 
 
 def get_keyphrases_for_text_piece(
@@ -524,7 +523,7 @@ def aggregate_keyphrases(keyphrases_list: List[List[str]]) -> List[str]:
     return list(set(aggregated_keyphrases))
 
 
-def aggregate_embeddings(embeddings_array: List[List[float]]) -> List[float]:
+def aggregate_embeddings(embeddings_list: List[List[float]]) -> List[float]:
     """
     Aggregates multiple embeddings using mean pooling.
 
@@ -534,41 +533,9 @@ def aggregate_embeddings(embeddings_array: List[List[float]]) -> List[float]:
     Returns:
         List[float]: The aggregated embedding.
     """
+    embeddings_array = np.array(embeddings_list)
     aggregated_embedding = embeddings_array.mean(axis=0)
     return aggregated_embedding.tolist()
-
-
-def write_data_to_csv(data: CSVRow):
-    """
-    Writes data to the global CSV file. Handles concurrent access by using a lock.
-
-    Parameters:
-        data (CSVRow): The data to write to the CSV file.
-    """
-    while True:
-        try:
-            with csv_lock:
-                file_exists = os.path.isfile(csv_file_path)
-                with open(csv_file_path, mode='a', newline='', encoding='utf-8') as csvfile:
-                    fieldnames = ['is_for_whole_file', 'filename', 'slide_n_piece', 'extracted_raw_text',
-                                  'language', 'keyphrases', 'embedding']
-                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                    if not file_exists:
-                        writer.writeheader()
-                    writer.writerow({
-                        'is_for_whole_file': data.is_for_whole_file,
-                        'filename': data.filename,
-                        'slide_n_piece': data.slide_n_piece,
-                        'extracted_raw_text': data.extracted_raw_text,
-                        'language': data.language,
-                        'keyphrases': ','.join(data.keyphrases),
-                        'embedding': ','.join(map(str, data.embedding))
-                    })
-            break
-        except IOError:
-            # Wait and retry if the file is being accessed by another process
-            time.sleep(1)
-            continue
 
 
 def translate(text: str, text_language: str, desired_language: str, translator: Translator) -> str:
@@ -639,7 +606,7 @@ def get_text_pieces_from_txt_file(
 def get_text_pieces_from_pdf_file(
         filepath: str,
         index_in_two_languages: bool,
-        too_few_chars: int = 250
+        too_few_chars: int = 50
 ) -> Dict[str, List[str]]:
     """
     Extracts text pieces from a PDF file, handling pages with too few characters by using OCR or CHART2TEXT.
@@ -704,10 +671,43 @@ def get_text_pieces_from_pdf_file(
     return result
 
 
+def write_data_to_csv(data: CSVRow):
+    global CSV_FILE_PATH
+    """
+    Writes data to the global CSV file. Handles concurrent access by using a lock.
+
+    Parameters:
+        data (CSVRow): The data to write to the CSV file.
+    """
+    while True:
+        try:
+            file_exists = os.path.isfile(CSV_FILE_PATH)
+            with open(CSV_FILE_PATH, mode='a', newline='', encoding='utf-8') as csvfile:
+                fieldnames = ['is_for_whole_file', 'filename', 'slide_n_piece', 'extracted_raw_text',
+                              'language', 'keyphrases', 'embedding']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                if not file_exists:
+                    writer.writeheader()
+                writer.writerow({
+                    'is_for_whole_file': data.is_for_whole_file,
+                    'filename': data.filename,
+                    'slide_n_piece': data.slide_n_piece,
+                    'extracted_raw_text': data.extracted_raw_text,
+                    'language': data.language,
+                    'keyphrases': ','.join(data.keyphrases),
+                    'embedding': ','.join(map(str, data.embedding))
+                })
+            break
+        except IOError:
+            # Wait and retry if the file is being accessed by another process
+            time.sleep(1)
+            continue
+            
+
 def index_file(
         filepath: str,
         index_in_two_languages: bool = True,
-        too_few_chars: int = 250,
+        too_few_chars: int = 50,
         chunk_size: int = 250,
         overlap: int = 15,
         recursive_keyphrases: bool = True
@@ -747,7 +747,7 @@ def index_file(
                 csv_row = CSVRow(
                     is_for_whole_file=False,
                     filename=filename,
-                    slide_n_piece=idx,
+                    slide_n_piece=idx+1,
                     extracted_raw_text=text_piece,
                     language=language,
                     keyphrases=keyphrases_result.list_of_keyphrases,
@@ -768,7 +768,7 @@ def index_file(
                 csv_row_trans = CSVRow(
                     is_for_whole_file=False,
                     filename=filename,
-                    slide_n_piece=idx,
+                    slide_n_piece=idx+1,
                     extracted_raw_text=translated_text,
                     language=desired_language,
                     keyphrases=keyphrases_result_trans.list_of_keyphrases,
@@ -789,7 +789,7 @@ def index_file(
                 csv_row = CSVRow(
                     is_for_whole_file=False,
                     filename=filename,
-                    slide_n_piece=idx,
+                    slide_n_piece=idx+1,
                     extracted_raw_text=text_piece,
                     language=language,
                     keyphrases=keyphrases_result.list_of_keyphrases,
@@ -840,7 +840,7 @@ def index_file(
                 csv_row = CSVRow(
                     is_for_whole_file=False,
                     filename=filename,
-                    slide_n_piece=idx,
+                    slide_n_piece=idx+1,
                     extracted_raw_text=text_piece,
                     language='en',
                     keyphrases=keyphrases_result.list_of_keyphrases,
@@ -869,7 +869,7 @@ def index_file(
                 csv_row = CSVRow(
                     is_for_whole_file=False,
                     filename=filename,
-                    slide_n_piece=idx,
+                    slide_n_piece=idx+1,
                     extracted_raw_text=text_piece,
                     language='ru',
                     keyphrases=keyphrases_result.list_of_keyphrases,
@@ -892,3 +892,17 @@ def index_file(
             write_data_to_csv(csv_row)
     else:
         raise ValueError('Unsupported file extension')
+
+
+
+def create_inverted_index(csv_file_path: str, index_storage_path: str):
+    pass
+
+def retrieval_stage(keywords: List[str], topk: int=100, inverted_index=None):
+    pass
+    
+def ranking_stage(embedding: List[float], topk: int=5):
+    pass
+    
+def search(query: str, topk_retrieval: int=100, topk_ranking: int=5):
+    pass
