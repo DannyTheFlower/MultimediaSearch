@@ -1,17 +1,17 @@
-from typing import List, Set, Dict, Union, Optional, Any
+from typing import List, Set, Dict, Union, Optional, Any, Tuple
 from pydantic import BaseModel, validator
 import numpy as np
 import pandas as pd
 import time
-import threading
-import io
 import os
+import pickle
 import csv
 import fitz
 from PIL import Image
 import cv2
 from langdetect import detect
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
 import torch
@@ -41,7 +41,7 @@ nlp = load('en_core_web_sm')
 # !cp -rf /usr/share/nltk_data/corpora/wordnet2022 /usr/share/nltk_data/corpora/wordnet # temp fix for lookup error.
 
 
-CSV_FILE_PATH = 'global.csv'
+CSV_FILE_PATH = 'global_final.csv'
 
 
 class CSVRow(BaseModel):
@@ -255,6 +255,12 @@ MORPH_RULES = [
     [{"POS": "ADJF", "case": ["nomn", "accs"]}, {"POS": "NOUN", "case": ["nomn", "accs"]},
      {"POS": "NOUN", "case": ["gent"]}]
 ]
+
+VECTORIZER_EN = TfidfVectorizer()
+VECTORIZER_RU = TfidfVectorizer()
+
+
+# DATA = pd.read_csv(CSV_FILE_PATH).dropna(subset=['keyphrases']).reset_index(drop=True)
 
 
 #########################################################################
@@ -702,7 +708,7 @@ def write_data_to_csv(data: CSVRow):
             # Wait and retry if the file is being accessed by another process
             time.sleep(1)
             continue
-            
+
 
 def index_file(
         filepath: str,
@@ -747,7 +753,7 @@ def index_file(
                 csv_row = CSVRow(
                     is_for_whole_file=False,
                     filename=filename,
-                    slide_n_piece=idx+1,
+                    slide_n_piece=idx + 1,
                     extracted_raw_text=text_piece,
                     language=language,
                     keyphrases=keyphrases_result.list_of_keyphrases,
@@ -763,12 +769,13 @@ def index_file(
                 # Process translation
                 desired_language = 'ru' if language == 'en' else 'en'
                 translated_text = translate(text_piece, language, desired_language, translator)
-                keyphrases_result_trans = get_keyphrases_for_text_piece(translated_text, desired_language, recursive_keyphrases)
+                keyphrases_result_trans = get_keyphrases_for_text_piece(translated_text, desired_language,
+                                                                        recursive_keyphrases)
                 embedding_result_trans = get_embedding_for_text_piece(translated_text, embedder)
                 csv_row_trans = CSVRow(
                     is_for_whole_file=False,
                     filename=filename,
-                    slide_n_piece=idx+1,
+                    slide_n_piece=idx + 1,
                     extracted_raw_text=translated_text,
                     language=desired_language,
                     keyphrases=keyphrases_result_trans.list_of_keyphrases,
@@ -789,7 +796,7 @@ def index_file(
                 csv_row = CSVRow(
                     is_for_whole_file=False,
                     filename=filename,
-                    slide_n_piece=idx+1,
+                    slide_n_piece=idx + 1,
                     extracted_raw_text=text_piece,
                     language=language,
                     keyphrases=keyphrases_result.list_of_keyphrases,
@@ -840,7 +847,7 @@ def index_file(
                 csv_row = CSVRow(
                     is_for_whole_file=False,
                     filename=filename,
-                    slide_n_piece=idx+1,
+                    slide_n_piece=idx + 1,
                     extracted_raw_text=text_piece,
                     language='en',
                     keyphrases=keyphrases_result.list_of_keyphrases,
@@ -869,7 +876,7 @@ def index_file(
                 csv_row = CSVRow(
                     is_for_whole_file=False,
                     filename=filename,
-                    slide_n_piece=idx+1,
+                    slide_n_piece=idx + 1,
                     extracted_raw_text=text_piece,
                     language='ru',
                     keyphrases=keyphrases_result.list_of_keyphrases,
@@ -894,15 +901,195 @@ def index_file(
         raise ValueError('Unsupported file extension')
 
 
+def build_tfidf(index_storage_path: str):
+    """
+    Creates TF-IDF vectorizers for English and Russian keyphrases.
 
-def create_inverted_index(csv_file_path: str, index_storage_path: str):
-    pass
+    Parameters:
+        index_storage_path (str): Path to store the inverted indexes and TF-IDF vectorizers.
+    """
+    global VECTORIZER_EN, VECTORIZER_RU, DATA
 
-def retrieval_stage(keywords: List[str], topk: int=100, inverted_index=None):
-    pass
-    
-def ranking_stage(embedding: List[float], topk: int=5):
-    pass
-    
-def search(query: str, topk_retrieval: int=100, topk_ranking: int=5):
-    pass
+    if not os.path.exists(index_storage_path):
+        os.mkdir(index_storage_path)
+
+    data_en = []
+    data_ru = []
+
+    # Read the CSV file and separate data by language
+    for _, row in DATA.iterrows():
+        if row['is_for_whole_file'] == False:
+            language = row['language']
+            keyphrases = row['keyphrases']
+
+            if language == 'en':
+                data_en.append(keyphrases)
+            elif language == 'ru':
+                data_ru.append(keyphrases)
+
+    # Create TF-IDF vectorizer and fit on keyphrases for English
+    if data_en:
+        tfidf_matrix_en = VECTORIZER_EN.fit_transform(data_en)
+        # Save the vectorizer and data
+        with open(os.path.join(index_storage_path, 'tfidf_vectorizer_en.pkl'), 'wb') as f:
+            pickle.dump(VECTORIZER_EN, f)
+        np.save(os.path.join(index_storage_path, 'tfidf_matrix_en.npy'), tfidf_matrix_en.toarray())
+
+    # Create TF-IDF vectorizer and fit on keyphrases for Russian
+    if data_ru:
+        tfidf_matrix_ru = VECTORIZER_RU.fit_transform(data_ru)
+        # Save the vectorizer and data
+        with open(os.path.join(index_storage_path, 'tfidf_vectorizer_ru.pkl'), 'wb') as f:
+            pickle.dump(VECTORIZER_RU, f)
+        np.save(os.path.join(index_storage_path, 'tfidf_matrix_ru.npy'), tfidf_matrix_ru.toarray())
+
+
+def retrieval_stage(keywords: List[str], language: str, topk: int = 100,
+                    index_storage_path: str = None) -> pd.DataFrame:
+    """
+    Retrieves the top-k documents based on TF-IDF cosine similarity of keyphrases.
+
+    Parameters:
+        keywords (List[str]): List of keyphrases from the user's query.
+        language (str): Language of the query ('en' or 'ru').
+        topk (int): Number of top documents to retrieve.
+        index_storage_path (str): Path where the inverted indexes and TF-IDF vectorizers are stored.
+
+    Returns:
+        pd.DataFrame: DataFrame containing document data and similarity scores.
+    """
+    global DATA
+
+    if language == 'en':
+        vectorizer_path = os.path.join(index_storage_path, 'tfidf_vectorizer_en.pkl')
+        tfidf_matrix_path = os.path.join(index_storage_path, 'tfidf_matrix_en.npy')
+    elif language == 'ru':
+        vectorizer_path = os.path.join(index_storage_path, 'tfidf_vectorizer_ru.pkl')
+        tfidf_matrix_path = os.path.join(index_storage_path, 'tfidf_matrix_ru.npy')
+    else:
+        return pd.DataFrame()
+
+    # Load the TF-IDF vectorizer and matrix
+    with open(vectorizer_path, 'rb') as f:
+        vectorizer = pickle.load(f)
+    tfidf_matrix = np.load(tfidf_matrix_path)
+
+    # Transform the query keyphrases
+    query_tfidf = vectorizer.transform([' '.join(keywords)])
+    # Compute cosine similarity
+    similarities = cosine_similarity(query_tfidf, tfidf_matrix)[0]
+    # Get top-k indices
+    topk_indices = similarities.argsort()[-topk:][::-1]
+    topk_similarities = similarities[topk_indices]
+    # Get the candidate documents
+    candidates = DATA.iloc[topk_indices].copy()
+    # Add the similarities to the candidates DataFrame
+    candidates['tfidf_similarity'] = topk_similarities
+    # Sort candidates by tfidf_similarity
+    candidates = candidates.sort_values(by='tfidf_similarity', ascending=False)
+    return candidates
+
+
+def ranking_stage(query_embedding: List[float], candidates: pd.DataFrame, topk: int = 5) -> pd.DataFrame:
+    """
+    Ranks the candidate documents based on embedding cosine similarity.
+
+    Parameters:
+        query_embedding (List[float]): Embedding of the user's query.
+        candidates (pd.DataFrame): Candidate documents from the retrieval stage.
+        topk (int): Number of top documents to return.
+
+    Returns:
+        pd.DataFrame: DataFrame of top-k documents with highest embedding similarity.
+    """
+    # Convert embeddings from strings to numpy arrays
+    candidate_embeddings = np.stack(
+        candidates['embedding'].apply(lambda x: np.array(eval('[' + x + ']'))).values
+    )
+    query_embedding = np.array(query_embedding).reshape(1, -1)
+    similarities = cosine_similarity(query_embedding, candidate_embeddings)[0]
+    # Add similarities to candidates DataFrame
+    candidates = candidates.copy()  # To avoid modifying the original DataFrame
+    candidates['embedding_similarity'] = similarities
+    # Sort candidates by embedding similarity
+    candidates = candidates.sort_values(by='embedding_similarity', ascending=False)
+    # Return top-k candidates
+    return candidates.head(topk)
+
+
+def search(
+        query: str,
+        topk_retrieval: int = 100,
+        topk_ranking: int = 5,
+        use_tfidf: bool = False,
+        use_embedder: bool = True,
+        index_storage_path: str = None
+):
+    """
+    Performs the search operation without using embeddings, ranking only by TF-IDF similarities.
+
+    Parameters:
+        query (str): The user's search query.
+        topk_retrieval (int): Number of top documents to retrieve in the retrieval stage.
+        topk_ranking (int): Number of top documents to return.
+        use_tfidf (bool): Whether to use TF-IDF vectorizer or not.
+        use_embedder (bool): Whether to use embedder or not.
+        index_storage_path (str): Path where the inverted indexes and TF-IDF vectorizers are stored.
+
+    Returns:
+        pd.DataFrame: DataFrame of top-k search results.
+    """
+    global TRANSLATOR, STOPWORDS, EMBEDDER
+
+    # Detect language of the query
+    language_result = detect_language(query)
+    query_language = language_result.language
+
+    # Translate the query to the other language
+    if query_language == 'en':
+        translated_query = TRANSLATOR.translate(query, 'en', 'ru')
+        languages = ['en', 'ru']
+        queries = [query, translated_query]
+    elif query_language == 'ru':
+        translated_query = TRANSLATOR.translate(query, 'ru', 'en')
+        languages = ['ru', 'en']
+        queries = [query, translated_query]
+    else:
+        # Default to English if language detection fails
+        query_language = 'en'
+        languages = ['en']
+        queries = [query]
+
+    all_results = []
+    for lang, q in zip(languages, queries):
+        # Extract keyphrases from the query
+        preprocessed_query = preprocess_text(q, lang=lang, stopwords=STOPWORDS)
+        keyphrases_result = get_keyphrases_for_text_piece(preprocessed_query, lang)
+        keyphrases = keyphrases_result.list_of_keyphrases
+
+        # Retrieve top-k documents based on TF-IDF cosine similarity
+        if use_tfidf:
+            candidates = retrieval_stage(keyphrases, lang, topk_retrieval, index_storage_path)
+        else:
+            candidates = DATA
+
+        if candidates.empty:
+            continue  # Skip if no candidates found in this language
+
+        if use_embedder:
+            embedding_result = EMBEDDER.predict(q)
+            query_embedding = embedding_result.embedding
+            topk_candidates = ranking_stage(query_embedding, candidates, topk_ranking)
+        else:
+            topk_candidates = candidates.head(topk_ranking)
+
+        all_results.append(topk_candidates)
+
+    # If results from both languages, combine and get top-k
+    if all_results:
+        all_results_df = pd.concat(all_results)
+        sort_by = 'embedding_similarity' if use_embedder else 'tfidf_similarity'
+        all_results_df = all_results_df.sort_values(by=sort_by, ascending=False)
+        return all_results_df.head(topk_ranking)
+    else:
+        return pd.DataFrame()

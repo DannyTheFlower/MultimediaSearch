@@ -1,6 +1,9 @@
-from retrieval import find_similar_neighbors
-from utils import detect_language
+from backend.retrieval import find_similar_neighbors
+from backend.utils import detect_language
 import requests
+
+MODEL_NAME = 'b1gjp5vama10h4due384'
+IAM_TOKEN = 't1.9euelZqYnInKi5TJy8_IzpmUnsjHiu3rnpWal5CVnY2ayJXJksaJyY7NnMnl8_c-KkJG-e9iGB1D_t3z935YP0b572IYHUP-zef1656VmpeYnpeLnY_Mx5DJnJDNmcrM7_zF656VmpeYnpeLnY_Mx5DJnJDNmcrM.E2LM94R6WFFPNa6mQGFKXaWgGrliT5Y1O6Rt51Bos2x3PQnTr1g9XZRl9iaw6BSeMgwyy0_KkZIvgkPoeRBuAw'
 
 
 def get_llm_answer(query, query_language, texts_for_rag):

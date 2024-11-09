@@ -1,10 +1,15 @@
 import streamlit as st
-import time
 import os
 import fitz
 
+from backend.rag import get_answer
+
 if "QUERY" not in st.session_state:
     st.session_state["QUERY"] = ""
+if "USE_GPT" not in st.session_state:
+    st.session_state["USE_GPT"] = False
+if "TOP_K" not in st.session_state:
+    st.session_state["TOP_K"] = 2
 if "UPLOAD_FOLDER" not in st.session_state:
     st.session_state["UPLOAD_FOLDER"] = "uploaded_files"
     os.makedirs(st.session_state["UPLOAD_FOLDER"], exist_ok=True)
@@ -15,63 +20,69 @@ if "MEDIA_FOLDER" not in st.session_state:
 # Set page configuration
 st.set_page_config(page_title="Найти информацию", page_icon="app/favicon.ico")
 
-# Поиск информации
 st.title("Поисковый чат-бот для рекламного агентства")
 st.header("Поиск информации")
 query = st.text_input("Введите ваш вопрос здесь:", st.session_state["QUERY"])
 
-# Кнопка для отправки запроса
-if st.button("Поиск"):
+col_search, col_options1, col_options2 = st.columns([2, 1, 1])
+
+with col_search:
+    search_button = st.button("Поиск")
+with col_options1:
+    use_gpt = st.checkbox("Использовать GPT", value=st.session_state["USE_GPT"])
+with col_options2:
+    top_k = st.selectbox("Количество ответов", options=[1, 2, 3, 4, 5], index=st.session_state["TOP_K"])
+    st.session_state["TOP_K"] = top_k - 1
+
+if search_button:
     if query.strip() == "":
         st.warning("Пожалуйста, введите вопрос для поиска.")
     else:
         st.session_state["QUERY"] = query
         with st.spinner("Поиск ответа..."):
             @st.cache_data(show_spinner=False)
-            def search_answer(query):
-                time.sleep(2)
-                return [
-                    {
-                        "answer": "Сократилось более чем на 50%",
-                        "filename": "../media/1.pdf",
-                        "slide_number": 34
-                    },
-                    {
-                        "answer": "Количество телепрограмм увеличилось на 20%",
-                        "filename": "data_analysis.txt",
-                        "slide_number": None
-                    },
-                    {
-                        "answer": "Рейтинги телепрограмм снизились в два раза",
-                        "filename": "report2.pdf",
-                        "slide_number": 12
-                    }
-                ]
+            def get_answer_and_cache(query, use_gpt, top_k):
+                return get_answer(query, use_gpt, top_k)
 
-            st.session_state["LIST_RESULT"] = search_answer(query)
+            st.session_state["LIST_RESULT"] = get_answer_and_cache(query, use_gpt, top_k)
 
 if "LIST_RESULT" in st.session_state and st.session_state["LIST_RESULT"]:
-    result_list = st.session_state["LIST_RESULT"]
+    result_list, llm_response = st.session_state["LIST_RESULT"]
 
+    if llm_response:
+        st.subheader("Ответ:")
+        st.write(llm_response)
     options = [f"Результат {i+1}" for i in range(len(result_list))]
-    selected_option = st.selectbox("Выберите результат для просмотра:", options)
+    st.subheader("Вот, какие файлы нашлись по вашему запросу:")
+    selected_option = st.selectbox("Выбрать результат поиска", options)
     index = options.index(selected_option)
     result = result_list[index]
 
-    st.subheader("Ответ:")
-    st.write(result["answer"])
-    st.write(f"**Файл:** {result['filename']}")
-    if result['slide_number']:
-        st.write(f"**Номер слайда/страницы:** {result['slide_number']}")
+    file_path = os.path.join(st.session_state["MEDIA_FOLDER"], result["filename"])
+    col_file, col_download = st.columns([1, 7])
+    with col_file:
+        st.write(f"**Файл:** {result['filename']}")
+    if os.path.exists(file_path):
+        with col_download:
+            st.download_button(
+                label="Скачать файл",
+                data=open(file_path, "rb").read(),
+                file_name=result["filename"],
+                icon=":material/arrow_downward:",
+                mime="application/octet-stream"
+            )
 
-    # Если это PDF-файл, отображаем нужную страницу
-    if result["filename"].lower().endswith(".pdf") and result.get("slide_number"):
-        pdf_path = os.path.join(st.session_state['UPLOAD_FOLDER'], result["filename"])
-        page_number = result["slide_number"]
+    try:
+        page_number = int(result["info"])
+        st.write(f"**Номер слайда/страницы:** {page_number}")
+    except Exception as e:
+        st.write(result['info'])
 
-        if os.path.exists(pdf_path):
+    # If it's a PDF, return the image of the page
+    if result["filename"].lower().endswith(".pdf") and result.get("info"):
+        if os.path.exists(file_path):
             try:
-                with fitz.open(pdf_path) as doc:
+                with fitz.open(file_path) as doc:
                     if 0 <= page_number - 1 < len(doc):
                         page = doc.load_page(page_number - 1)
                         pix = page.get_pixmap()
@@ -82,13 +93,13 @@ if "LIST_RESULT" in st.session_state and st.session_state["LIST_RESULT"]:
             except Exception as e:
                 st.error(f"Ошибка при отображении страницы: {e}")
         else:
-            st.error("PDF файл не найден.")
+            st.error("PDF-файл не найден.")
     else:
         st.info("Превью доступно только для PDF-файлов с указанным номером страницы.")
 elif "LIST_RESULT" in st.session_state:
     st.warning("Результаты не найдены.")
 
-# Стилизация приложения
+# Stylization
 st.markdown("""
 <style>
     .st-button button {

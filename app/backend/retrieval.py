@@ -10,7 +10,7 @@ EMBEDDER = None
 INDEX = None
 
 
-def init_all(data_path='indexed_data.csv', embedder_name='sergeyzh/rubert-tiny-turbo', index_path=None, save_index_path=None):  
+def init_all(data_path='app/backend/indexed_data.csv', embedder_name='sergeyzh/rubert-tiny-turbo', index_path=None, save_index_path=None):
     global DATA, EMBEDDER, INDEX
     DATA = pd.read_csv(data_path)
     EMBEDDER = SentenceTransformer(embedder_name)
