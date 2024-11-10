@@ -4,6 +4,12 @@ import fitz
 
 from backend.rag import get_answer
 
+
+@st.cache_data(show_spinner=False)
+def get_answer_and_cache(data_version, query, use_gpt, top_k):
+    return get_answer(query, use_gpt, top_k)
+
+
 if "QUERY" not in st.session_state:
     st.session_state["QUERY"] = ""
 if "USE_GPT" not in st.session_state:
@@ -16,11 +22,13 @@ if "UPLOAD_FOLDER" not in st.session_state:
 if "MEDIA_FOLDER" not in st.session_state:
     st.session_state["MEDIA_FOLDER"] = "media"
     os.makedirs(st.session_state["MEDIA_FOLDER"], exist_ok=True)
+if "DATA_VERSION" not in st.session_state:
+    st.session_state["DATA_VERSION"] = 0
 
 # Set page configuration
 st.set_page_config(page_title="Найти информацию", page_icon="app/favicon.ico")
 
-st.title("Поисковый чат-бот для рекламного агентства")
+st.title("Поисковый бот для рекламного агентства")
 st.header("Поиск информации")
 query = st.text_input("Введите ваш вопрос здесь:", st.session_state["QUERY"])
 
@@ -40,11 +48,8 @@ if search_button:
     else:
         st.session_state["QUERY"] = query
         with st.spinner("Поиск ответа..."):
-            @st.cache_data(show_spinner=False)
-            def get_answer_and_cache(query, use_gpt, top_k):
-                return get_answer(query, use_gpt, top_k)
 
-            st.session_state["LIST_RESULT"] = get_answer_and_cache(query, use_gpt, top_k)
+            st.session_state["LIST_RESULT"] = get_answer_and_cache(st.session_state["DATA_VERSION"], query, use_gpt, top_k)
 
 if "LIST_RESULT" in st.session_state and st.session_state["LIST_RESULT"]:
     result_list, llm_response = st.session_state["LIST_RESULT"]

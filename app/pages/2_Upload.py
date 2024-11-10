@@ -3,7 +3,7 @@ import time
 import os
 
 from backend.files_processing import upload_filedata_to_csv_file
-from backend.retrieval import index_new_data
+from backend.retrieval import index_new_data, load_retrieval_resources
 
 if "INDEXING" not in st.session_state:
     st.session_state["INDEXING"] = False
@@ -13,6 +13,8 @@ if "UPLOAD_FOLDER" not in st.session_state:
 if "MEDIA_FOLDER" not in st.session_state:
     st.session_state["MEDIA_FOLDER"] = "media"
     os.makedirs(st.session_state["MEDIA_FOLDER"], exist_ok=True)
+if "DATA_VERSION" not in st.session_state:
+    st.session_state["DATA_VERSION"] = 0
 processed_files = []
 
 st.set_page_config(page_title="Загрузить файлы", page_icon="app/favicon.ico")
@@ -63,6 +65,7 @@ elif st.button("Запустить индексацию"):
             os.rename(src, dst)
 
         processed_files = []
+        load_retrieval_resources(st.session_state["DATA_VERSION"])
         st.success("Индексация завершена.")
     except Exception as e:
         st.error(f"Ошибка при индексации: {e}")

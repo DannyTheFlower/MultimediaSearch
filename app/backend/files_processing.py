@@ -1,3 +1,4 @@
+import streamlit
 from backend.utils import get_file_extension
 from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
 from easyocr import Reader
@@ -8,6 +9,7 @@ import csv
 import numpy as np
 from PIL import Image
 import fitz
+import streamlit as st
 
 
 CSV_FILE_PATH = 'indexed_data.csv'
@@ -44,11 +46,25 @@ class Chart2Text:
         return output_text
 
 
-def init_all(include_chart2text=False):
-    global OCR, CHART2TEXT
-    OCR = OCRModel()
+@st.cache_resource(show_spinner=False)
+def load_ocr():
+    return OCRModel
+
+
+@st.cache_resource(show_spinner=False)
+def load_chart2text():
+    return Chart2Text()
+
+
+@st.cache_resource(show_spinner=False)
+def load_fp_resources(include_ocr: bool = True, include_chart2text: bool = False):
+    if include_ocr and include_chart2text:
+        return load_ocr(), load_chart2text()
+    if include_ocr:
+        return load_ocr()
     if include_chart2text:
-        CHART2TEXT = Chart2Text()
+        return load_chart2text()
+    return None
 
 
 def get_text_pieces_from_txt_file(
@@ -123,10 +139,13 @@ def upload_filedata_to_csv_file(
     extension = get_file_extension(filename)
     if extension == '.txt':
         text_pieces = get_text_pieces_from_txt_file(filepath_from, chunk_size, overlap)
+        for idx, text_piece in enumerate(text_pieces):
+            csv_row = {'filename': filename, 'n_slide': None, 'text': text_piece}
+            write_data_to_csv(csv_row, filepath_to)
     elif extension == '.pdf':
         text_pieces = get_text_pieces_from_pdf_file(filepath_from, too_few_chars)
+        for idx, text_piece in enumerate(text_pieces):
+            csv_row = {'filename': filename, 'n_slide': idx + 1, 'text': text_piece}
+            write_data_to_csv(csv_row, filepath_to)
     else:
         raise ValueError('Unsupported file extension')
-    for idx, text_piece in enumerate(text_pieces):
-        csv_row = {'filename': filename, 'n_slide': None, 'text': text_piece}
-        write_data_to_csv(csv_row, filepath_to)
