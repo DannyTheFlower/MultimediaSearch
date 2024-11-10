@@ -14,7 +14,7 @@ class Config(BaseSettings):
     CSV_FILE_PATH: str = "indexed_data.csv"
 
     # Model
-    EMBEDDER_NAME: str = "sergeyzh/rubert-tiny-turbo"
+    EMBEDDER_NAME: str = "deepvk/USER-bge-m3"
 
     # OCR and Chart2Text Options
     INCLUDE_OCR: bool = True
