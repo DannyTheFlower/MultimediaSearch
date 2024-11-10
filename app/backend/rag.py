@@ -7,7 +7,6 @@ from typing import List
 import streamlit as st
 
 
-
 def get_llm_answer(query: str, query_language: str, texts_for_rag: List[str]) -> str:
     """
     Generates an answer using a Language Model API.
