@@ -4,18 +4,32 @@ import os
 from sentence_transformers import SentenceTransformer
 import faiss
 import streamlit as st
+from backend.config import config
+from typing import Tuple, Any, List
 
 
 @st.cache_resource(show_spinner=False)
 def load_retrieval_resources(
         data_version: int = 0,
-        data_path='app/backend/indexed_data.csv',
-        embedder_name='sergeyzh/rubert-tiny-turbo',
-        index_path: str = 'app/backend/index.faiss',
-        embeddings_path: str = 'app/backend/embeddings.npz',
-        save_index_path: str = 'app/backend/index.faiss',
-        save_embeddings_path: str = 'app/backend/embeddings.npz'
-):
+        data_path: str = config.DATA_PATH,
+        embedder_name: str = config.EMBEDDER_NAME,
+        index_path: str = config.INDEX_PATH,
+        embeddings_path: str = config.EMBEDDINGS_PATH,
+        save_index_path: str = config.SAVE_INDEX_PATH,
+        save_embeddings_path: str = config.SAVE_EMBEDDINGS_PATH
+) -> Tuple[pd.DataFrame, SentenceTransformer, faiss.IndexFlatIP, np.ndarray]:
+    """
+    Loads or creates retrieval resources including data, embedder, index, and embeddings.
+
+    :param data_version: Version of the data for cache invalidation.
+    :param data_path: Path to the data CSV file.
+    :param embedder_name: Name of the sentence transformer model.
+    :param index_path: Path to the FAISS index file.
+    :param embeddings_path: Path to the embeddings file.
+    :param save_index_path: Path to save the FAISS index.
+    :param save_embeddings_path: Path to save the embeddings.
+    :return: Tuple containing data, embedder, index, and embeddings.
+    """
     data = pd.read_csv(data_path)
     embedder = SentenceTransformer(embedder_name)
     if os.path.exists(index_path) and os.path.exists(embeddings_path):
@@ -33,7 +47,14 @@ def load_retrieval_resources(
     return data, embedder, index, embeddings
 
 
-def find_similar_neighbors(query, k=3):
+def find_similar_neighbors(query: str, k: int = 3) -> List[pd.Series]:
+    """
+    Finds similar neighbors for the given query using FAISS index.
+
+    :param query: The search query.
+    :param k: Number of neighbors to retrieve.
+    :return: List of similar data entries.
+    """
     data, embedder, index, embeddings = load_retrieval_resources(st.session_state["DATA_VERSION"])
 
     query_vector = embedder.encode([query]).flatten()
@@ -44,10 +65,17 @@ def find_similar_neighbors(query, k=3):
 
 
 def index_new_data(
-        new_data_csv_filepath='app/backend/temp_data.csv',
-        save_index_path='app/backend/index.faiss',
-        save_embeddings_path='app/backend/embeddings.npz'
+        new_data_csv_filepath: str = config.TEMP_DATA_CSV,
+        save_index_path: str = config.SAVE_INDEX_PATH,
+        save_embeddings_path: str = config.SAVE_EMBEDDINGS_PATH
 ):
+    """
+    Indexes new data and updates the FAISS index and embeddings.
+
+    :param new_data_csv_filepath: Path to the new data CSV file.
+    :param save_index_path: Path to save the updated FAISS index.
+    :param save_embeddings_path: Path to save the updated embeddings.
+    """
     data, embedder, index, embeddings = load_retrieval_resources(st.session_state["DATA_VERSION"])
 
     new_data = pd.read_csv(new_data_csv_filepath)
@@ -62,7 +90,7 @@ def index_new_data(
     np.savez(save_embeddings_path, embeddings=embeddings)
 
     data = pd.concat([data, new_data], ignore_index=True)
-    data.to_csv('app/backend/indexed_data.csv', index=False)
+    data.to_csv(config.DATA_PATH, index=False)
 
     os.remove(new_data_csv_filepath)
     st.session_state["DATA_VERSION"] += 1

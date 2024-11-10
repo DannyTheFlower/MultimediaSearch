@@ -1,7 +1,13 @@
 import os
 
 
-def detect_language(text: str):
+def detect_language(text: str) -> str:
+    """
+    Detects whether the text is in English or Russian.
+
+    :param text: The text to analyze.
+    :return: 'en' for English, 'ru' for Russian.
+    """
     english_letters = 0
     russian_letters = 0
     for char in text:
@@ -13,5 +19,11 @@ def detect_language(text: str):
     return language
 
 
-def get_file_extension(text: str):
+def get_file_extension(text: str) -> str:
+    """
+    Extracts the file extension from a filename.
+
+    :param text: The filename.
+    :return: The file extension.
+    """
     return os.path.splitext(text)[1]

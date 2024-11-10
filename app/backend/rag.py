@@ -1,15 +1,20 @@
 from backend.retrieval import find_similar_neighbors
 from backend.utils import detect_language
+from backend.config import config
 import requests
 import numpy as np
-
-MODEL_NAME = 'b1gjp5vama10h4due384'
-IAM_TOKEN = 't1.9euelZqYnInKi5TJy8_IzpmUnsjHiu3rnpWal5CVnY2ayJXJksaJyY7NnMnl8_c-KkJG-e9iGB1D_t3z935YP0b572IYHUP-zef1656VmpeYnpeLnY_Mx5DJnJDNmcrM7_zF656VmpeYnpeLnY_Mx5DJnJDNmcrM.E2LM94R6WFFPNa6mQGFKXaWgGrliT5Y1O6Rt51Bos2x3PQnTr1g9XZRl9iaw6BSeMgwyy0_KkZIvgkPoeRBuAw'
+from typing import List
 
 
-def get_llm_answer(query, query_language, texts_for_rag):
-    global MODEL_NAME, IAM_TOKEN
+def get_llm_answer(query: str, query_language: str, texts_for_rag: List[str]) -> str:
+    """
+    Generates an answer using a Language Model API.
 
+    :param query: The user's query.
+    :param query_language: Detected language of the query.
+    :param texts_for_rag: Context texts retrieved for RAG.
+    :return: Generated answer.
+    """
     if query_language == 'ru':
         prompt = f'''Тебе даны вопрос {query} и тексты {texts_for_rag}. 
         Верни суммаризацию ответа из текстов. 
@@ -24,12 +29,12 @@ def get_llm_answer(query, query_language, texts_for_rag):
     url = 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion'
 
     headers = {
-        'Authorization': f'Bearer {IAM_TOKEN}',
+        'Authorization': f'Bearer {config.IAM_TOKEN}',
         'Content-Type': 'application/json'
     }
 
     data = {
-        "modelUri": f"gpt://{MODEL_NAME}/yandexgpt/latest",
+        "modelUri": f"gpt://{config.MODEL_NAME}/yandexgpt/latest",
         "completionOptions": {
             "stream": False,
             "temperature": 0.6,
@@ -55,7 +60,15 @@ def get_llm_answer(query, query_language, texts_for_rag):
     return answer
 
 
-def get_answer(query, use_gpt=True, topk_for_rag=3):
+def get_answer(query: str, use_gpt: bool = True, topk_for_rag: int = 3):
+    """
+    Retrieves the answer for a query, optionally using GPT.
+
+    :param query: The user's query.
+    :param use_gpt: Flag to determine whether to use GPT.
+    :param topk_for_rag: Number of top results to consider.
+    :return: Tuple of information and the answer.
+    """
     rows_for_rag = find_similar_neighbors(query, topk_for_rag)
     info = []
     texts_for_rag = []

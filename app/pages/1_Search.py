@@ -1,27 +1,36 @@
 import streamlit as st
 import os
 import fitz
-
+from typing import Tuple, List, Dict
 from backend.rag import get_answer
+from backend.config import config
 
 
 @st.cache_data(show_spinner=False)
-def get_answer_and_cache(data_version, query, use_gpt, top_k):
+def get_answer_and_cache(data_version: int, query: str, use_gpt: bool, top_k: int) -> Tuple[List[Dict], str]:
+    """
+    Retrieves the answer and caches it based on the data version and query parameters.
+
+    :param data_version: Version of the data to ensure cache validity.
+    :param query: The user's search query.
+    :param use_gpt: Flag to determine whether to use GPT for generating the answer.
+    :param top_k: Number of top results to retrieve.
+    :return: A tuple containing the list of results and the LLM response.
+    """
     return get_answer(query, use_gpt, top_k)
 
 
+# Initialize session state variables
 if "QUERY" not in st.session_state:
     st.session_state["QUERY"] = ""
 if "USE_GPT" not in st.session_state:
     st.session_state["USE_GPT"] = False
 if "TOP_K" not in st.session_state:
     st.session_state["TOP_K"] = 2
-if "UPLOAD_FOLDER" not in st.session_state:
-    st.session_state["UPLOAD_FOLDER"] = "uploaded_files"
-    os.makedirs(st.session_state["UPLOAD_FOLDER"], exist_ok=True)
-if "MEDIA_FOLDER" not in st.session_state:
-    st.session_state["MEDIA_FOLDER"] = "media"
-    os.makedirs(st.session_state["MEDIA_FOLDER"], exist_ok=True)
+if "DIRS_CREATED" not in st.session_state:
+    os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
+    os.makedirs(config.MEDIA_FOLDER, exist_ok=True)
+    st.session_state["DIRS_CREATED"] = True
 if "DATA_VERSION" not in st.session_state:
     st.session_state["DATA_VERSION"] = 0
 
@@ -48,22 +57,26 @@ if search_button:
     else:
         st.session_state["QUERY"] = query
         with st.spinner("Поиск ответа..."):
+            st.session_state["LIST_RESULT"] = get_answer_and_cache(
+                st.session_state["DATA_VERSION"], query, use_gpt, top_k
+            )
+            st.rerun()  # костыль, try using forms
 
-            st.session_state["LIST_RESULT"] = get_answer_and_cache(st.session_state["DATA_VERSION"], query, use_gpt, top_k)
-
+# Display results
 if "LIST_RESULT" in st.session_state and st.session_state["LIST_RESULT"]:
     result_list, llm_response = st.session_state["LIST_RESULT"]
 
     if llm_response:
         st.subheader("Ответ:")
         st.write(llm_response)
+
     options = [f"Результат {i+1}" for i in range(len(result_list))]
-    st.subheader("Вот, какие файлы нашлись по вашему запросу:")
+    st.subheader("Вот какие файлы нашлись по вашему запросу:")
     selected_option = st.selectbox("Выбрать результат поиска", options)
     index = options.index(selected_option)
     result = result_list[index]
 
-    file_path = os.path.join(st.session_state["MEDIA_FOLDER"], result["filename"])
+    file_path = os.path.join(config.MEDIA_FOLDER, result["filename"])
     col_file, col_download = st.columns([1, 7])
     with col_file:
         st.write(f"**Файл:** {result['filename']}")

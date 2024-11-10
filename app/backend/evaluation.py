@@ -1,14 +1,27 @@
 import math
+from typing import List, Tuple, Set
 
 
-# Precision@k
-def precision_at_k(predicted_indices, real_indices, k):
+def precision_at_k(predicted_indices: List[int], real_indices: Set[int], k: int) -> float:
+    """
+    Computes Precision@k.
+
+    :param predicted_indices: List of predicted indices.
+    :param real_indices: Set of real indices.
+    :param k: Cut-off rank.
+    :return: Precision at k.
+    """
     relevant_items = set(predicted_indices[:k]) & set(real_indices)
     return len(relevant_items) / k
 
 
-# Mean Average Precision (MAP)
-def mean_average_precision(predicted_real_pairs):
+def mean_average_precision(predicted_real_pairs: List[Tuple[List[int], Set[int]]]) -> float:
+    """
+    Computes Mean Average Precision (MAP).
+
+    :param predicted_real_pairs: List of tuples containing predicted and real indices.
+    :return: MAP score.
+    """
     avg_precisions = []
     for predicted_indices, real_indices in predicted_real_pairs:
         if not real_indices:
@@ -24,8 +37,15 @@ def mean_average_precision(predicted_real_pairs):
     return sum(avg_precisions) / len(predicted_real_pairs)
 
 
-# Discounted Cumulative Gain (DCG)
-def dcg(predicted, real, k):
+def dcg(predicted: List[int], real: Set[int], k: int) -> float:
+    """
+    Computes Discounted Cumulative Gain (DCG).
+
+    :param predicted: List of predicted indices.
+    :param real: Set of real indices.
+    :param k: Cut-off rank.
+    :return: DCG score.
+    """
     dcg_score = 0
     for i, pred in enumerate(predicted[:k]):
         if pred in real:
@@ -33,16 +53,28 @@ def dcg(predicted, real, k):
     return dcg_score
 
 
-# Normalized Discounted Cumulative Gain (NDCG)
-def ndcg(predicted_indices, real_indices, k):
+def ndcg(predicted_indices: List[int], real_indices: Set[int], k: int) -> float:
+    """
+    Computes Normalized Discounted Cumulative Gain (NDCG).
+
+    :param predicted_indices: List of predicted indices.
+    :param real_indices: Set of real indices.
+    :param k: Cut-off rank.
+    :return: NDCG score.
+    """
     ideal_dcg = dcg(real_indices, real_indices, k)
     if ideal_dcg == 0:
         return 0
     return dcg(predicted_indices, real_indices, k) / ideal_dcg
 
 
-# Mean Reciprocal Rank (MRR)
-def mean_reciprocal_rank(predicted_real_pairs):
+def mean_reciprocal_rank(predicted_real_pairs: List[Tuple[List[int], Set[int]]]) -> float:
+    """
+    Computes Mean Reciprocal Rank (MRR).
+
+    :param predicted_real_pairs: List of tuples containing predicted and real indices.
+    :return: MRR score.
+    """
     reciprocal_ranks = []
     for predicted_indices, real_indices in predicted_real_pairs:
         rank = 0
@@ -54,7 +86,14 @@ def mean_reciprocal_rank(predicted_real_pairs):
     return sum(reciprocal_ranks) / len(reciprocal_ranks)
 
 
-def compute_metrics(predicted_real_pairs, k):
+def compute_metrics(predicted_real_pairs: List[Tuple[List[int], Set[int]]], k: int) -> dict:
+    """
+    Computes various evaluation metrics.
+
+    :param predicted_real_pairs: List of tuples containing predicted and real indices.
+    :param k: Cut-off rank.
+    :return: Dictionary of computed metrics.
+    """
     precision_scores = [precision_at_k(pred, real, k) for pred, real in predicted_real_pairs]
     map_score = mean_average_precision(predicted_real_pairs)
     ndcg_scores = [ndcg(pred, real, k) for pred, real in predicted_real_pairs]
