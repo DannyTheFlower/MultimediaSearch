@@ -28,4 +28,12 @@
 
 1. Склонируйте репозиторий и перейдите в корневую папку проекта
 2. Установите необходимые библиотеки из `requirements.txt`
-3. В терминале запустите команду `streamlit run app/Main.py`
+3. Создайте файл `.streamlit/secrets.toml` и запишите `MODEL_NAME` и `IAM_TOKEN` для работы с YandexGPT в следующем формате:
+
+   ```
+   [llm]
+   MODEL_NAME = "model_name"
+   IAM_TOKEN = "iam_token"
+   ```
+   
+5. В терминале запустите команду `streamlit run app/Main.py`
