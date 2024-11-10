@@ -4,6 +4,8 @@ from backend.config import config
 import requests
 import numpy as np
 from typing import List
+import streamlit as st
+
 
 
 def get_llm_answer(query: str, query_language: str, texts_for_rag: List[str]) -> str:
@@ -15,6 +17,9 @@ def get_llm_answer(query: str, query_language: str, texts_for_rag: List[str]) ->
     :param texts_for_rag: Context texts retrieved for RAG.
     :return: Generated answer.
     """
+    MODEL_NAME = st.secrets.llm["MODEL_NAME"]
+    IAM_TOKEN = st.secrets.llm["IAM_TOKEN"]
+
     if query_language == 'ru':
         prompt = f'''Тебе даны вопрос {query} и тексты {texts_for_rag}. 
         Верни суммаризацию ответа из текстов. 
@@ -29,12 +34,12 @@ def get_llm_answer(query: str, query_language: str, texts_for_rag: List[str]) ->
     url = 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion'
 
     headers = {
-        'Authorization': f'Bearer {config.IAM_TOKEN}',
+        'Authorization': f'Bearer {IAM_TOKEN}',
         'Content-Type': 'application/json'
     }
 
     data = {
-        "modelUri": f"gpt://{config.MODEL_NAME}/yandexgpt/latest",
+        "modelUri": f"gpt://{MODEL_NAME}/yandexgpt/latest",
         "completionOptions": {
             "stream": False,
             "temperature": 0.6,

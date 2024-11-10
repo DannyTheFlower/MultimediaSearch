@@ -13,10 +13,8 @@ class Config(BaseSettings):
     TEMP_DATA_CSV: str = "app/backend/data/temp_data.csv"
     CSV_FILE_PATH: str = "indexed_data.csv"
 
-    # Model and Tokens
+    # Model
     EMBEDDER_NAME: str = "sergeyzh/rubert-tiny-turbo"
-    MODEL_NAME: str = "model_name"
-    IAM_TOKEN: str = "iam_token"
 
     # OCR and Chart2Text Options
     INCLUDE_OCR: bool = True
