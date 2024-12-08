@@ -2,10 +2,9 @@ from backend.utils import get_file_extension
 from backend.config import config
 from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
 from easyocr import Reader
+from qdrant_client import QdrantClient
 import os
-import time
 import torch
-import csv
 import numpy as np
 from PIL import Image
 import fitz
@@ -101,6 +100,12 @@ def load_fp_resources(
     return None, None
 
 
+@st.cache_resource(show_spinner=False)
+def get_qdrant_client():
+    return QdrantClient(host=config.QDRANT_HOST, port=config.QDRANT_PORT)
+
+
+
 def get_text_pieces_from_txt_file(
         filepath: str,
         chunk_size: int = config.CHUNK_SIZE,
@@ -156,59 +161,21 @@ def get_text_pieces_from_pdf_file(
     return text_pieces
 
 
-def write_data_to_csv(data: dict, filepath: str = None):
-    """
-    Writes a single row of data to a CSV file.
-
-    :param data: Dictionary containing 'filename', 'n_slide', and 'text'.
-    :param filepath: Path to the CSV file.
-    """
-    filepath = config.CSV_FILE_PATH if filepath is None else filepath
-    while True:
-        try:
-            file_exists = os.path.isfile(filepath)
-            with open(filepath, mode='a', newline='', encoding='utf-8') as csvfile:
-                writer = csv.DictWriter(csvfile, fieldnames=['filename', 'n_slide', 'text'])
-                if not file_exists:
-                    writer.writeheader()
-                writer.writerow({
-                    'filename': data['filename'],
-                    'n_slide': data['n_slide'],
-                    'text': data['text'],
-                })
-            break
-        except IOError:
-            time.sleep(1)
-            continue
-
-
-def upload_filedata_to_csv_file(
+def prepare_filedata_for_qdrant(
         filepath_from: str,
-        filepath_to: str = config.TEMP_DATA_CSV,
         too_few_chars: int = config.TOO_FEW_CHARS,
         chunk_size: int = config.CHUNK_SIZE,
-        overlap: int = config.OVERLAP,
+        overlap: int = config.OVERLAP
 ):
-    """
-    Processes a file and uploads its data to a CSV file.
-
-    :param filepath_from: Source file path.
-    :param filepath_to: Destination CSV file path.
-    :param too_few_chars: Threshold for text extraction methods.
-    :param chunk_size: Chunk size for TXT files.
-    :param overlap: Overlap size for TXT files.
-    """
     filename = os.path.basename(filepath_from)
     extension = get_file_extension(filename)
     if extension == '.txt':
         text_pieces = get_text_pieces_from_txt_file(filepath_from, chunk_size, overlap)
-        for idx, text_piece in enumerate(text_pieces):
-            csv_row = {'filename': filename, 'n_slide': None, 'text': text_piece}
-            write_data_to_csv(csv_row, filepath_to)
+        data_rows = [{"filename": filename, "n_slide": -1, "text": t} for t in text_pieces]
     elif extension == '.pdf':
         text_pieces = get_text_pieces_from_pdf_file(filepath_from, too_few_chars)
-        for idx, text_piece in enumerate(text_pieces):
-            csv_row = {'filename': filename, 'n_slide': idx + 1, 'text': text_piece}
-            write_data_to_csv(csv_row, filepath_to)
+        data_rows = [{"filename": filename, "n_slide": i + 1, "text": txt} for i, txt in enumerate(text_pieces)]
     else:
         raise ValueError('Unsupported file extension')
+
+    return data_rows

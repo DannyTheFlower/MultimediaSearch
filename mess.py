@@ -49,7 +49,7 @@ class CSVRow(BaseModel):
     Data model representing a row in the global CSV file.
 
     Attributes:
-        is_for_whole_file (bool): Indicates if the data is aggregated for the whole file.
+        is_for_whole_file (bool): Indicates if the backup is aggregated for the whole file.
         filename (str): Name of the file being processed.
         slide_n_piece (Union[int, str]): Slide number or text piece identifier.
         extracted_raw_text (str): The raw text extracted from the file.
@@ -680,10 +680,10 @@ def get_text_pieces_from_pdf_file(
 def write_data_to_csv(data: CSVRow):
     global CSV_FILE_PATH
     """
-    Writes data to the global CSV file. Handles concurrent access by using a lock.
+    Writes backup to the global CSV file. Handles concurrent access by using a lock.
 
     Parameters:
-        data (CSVRow): The data to write to the CSV file.
+        backup (CSVRow): The backup to write to the CSV file.
     """
     while True:
         try:
@@ -719,7 +719,7 @@ def index_file(
         recursive_keyphrases: bool = True
 ):
     """
-    Main function to index a file (TXT or PDF). Processes text pieces, extracts keyphrases, embeddings, and writes data to CSV.
+    Main function to index a file (TXT or PDF). Processes text pieces, extracts keyphrases, embeddings, and writes backup to CSV.
 
     Parameters:
         filepath (str): The path to the file to index.
@@ -809,7 +809,7 @@ def index_file(
                 else:
                     embeddings_ru.append(embedding_result.embedding)
                     keyphrases_ru.append(keyphrases_result.list_of_keyphrases)
-        # Aggregate data for the whole file
+        # Aggregate backup for the whole file
         if embeddings_en:
             aggregated_embedding_en = aggregate_embeddings(embeddings_en)
             aggregated_keyphrases_en = aggregate_keyphrases(keyphrases_en)
@@ -916,7 +916,7 @@ def build_tfidf(index_storage_path: str):
     data_en = []
     data_ru = []
 
-    # Read the CSV file and separate data by language
+    # Read the CSV file and separate backup by language
     for _, row in DATA.iterrows():
         if row['is_for_whole_file'] == False:
             language = row['language']
@@ -930,7 +930,7 @@ def build_tfidf(index_storage_path: str):
     # Create TF-IDF vectorizer and fit on keyphrases for English
     if data_en:
         tfidf_matrix_en = VECTORIZER_EN.fit_transform(data_en)
-        # Save the vectorizer and data
+        # Save the vectorizer and backup
         with open(os.path.join(index_storage_path, 'tfidf_vectorizer_en.pkl'), 'wb') as f:
             pickle.dump(VECTORIZER_EN, f)
         np.save(os.path.join(index_storage_path, 'tfidf_matrix_en.npy'), tfidf_matrix_en.toarray())
@@ -938,7 +938,7 @@ def build_tfidf(index_storage_path: str):
     # Create TF-IDF vectorizer and fit on keyphrases for Russian
     if data_ru:
         tfidf_matrix_ru = VECTORIZER_RU.fit_transform(data_ru)
-        # Save the vectorizer and data
+        # Save the vectorizer and backup
         with open(os.path.join(index_storage_path, 'tfidf_vectorizer_ru.pkl'), 'wb') as f:
             pickle.dump(VECTORIZER_RU, f)
         np.save(os.path.join(index_storage_path, 'tfidf_matrix_ru.npy'), tfidf_matrix_ru.toarray())
@@ -956,7 +956,7 @@ def retrieval_stage(keywords: List[str], language: str, topk: int = 100,
         index_storage_path (str): Path where the inverted indexes and TF-IDF vectorizers are stored.
 
     Returns:
-        pd.DataFrame: DataFrame containing document data and similarity scores.
+        pd.DataFrame: DataFrame containing document backup and similarity scores.
     """
     global DATA
 

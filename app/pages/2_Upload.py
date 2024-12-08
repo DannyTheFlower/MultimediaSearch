@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 from typing import List
-from backend.files_processing import upload_filedata_to_csv_file
+from backend.files_processing import prepare_filedata_for_qdrant
 from backend.retrieval import index_new_data, load_retrieval_resources
 from backend.config import config
 
@@ -14,9 +14,17 @@ def write_files(files):
         # For future: track the same namings
         with open(file_path, "wb") as f:
             f.write(file.getbuffer())
-        upload_filedata_to_csv_file(file_path)
         uploaded_files.append(file.name)
     return uploaded_files
+
+
+def get_data_rows():
+    data_rows = []
+    files = os.listdir(config.UPLOAD_FOLDER)
+    for file in files:
+        file_path = os.path.join(config.UPLOAD_FOLDER, file)
+        data_rows.extend(prepare_filedata_for_qdrant(file_path))
+    return data_rows
 
 
 if "INDEXING" not in st.session_state:
@@ -40,7 +48,8 @@ uploaded_files = st.file_uploader(
 if uploaded_files:
     if st.button("Загрузить файлы"):
         with st.spinner("Обработка файлов..."):
-            processed_files.extend(write_files(uploaded_files))
+            files = write_files(uploaded_files)
+            processed_files.extend(files)
 
 if st.session_state["INDEXING"]:
     st.warning("Индексация уже запущена. Пожалуйста, подождите завершения текущей индексации.")
@@ -50,9 +59,9 @@ elif st.button("Запустить индексацию"):
 
     try:
         with st.spinner("Идёт индексация..."):
-            index_new_data()
+            index_new_data(get_data_rows())
 
-        # After indexing, move all the uploaded data to media folder
+        # After indexing, move all the uploaded backup to media folder
         for file in os.listdir(config.UPLOAD_FOLDER):
             src = os.path.join(config.UPLOAD_FOLDER, file)
             dst = os.path.join(config.MEDIA_FOLDER, file)
@@ -66,7 +75,7 @@ elif st.button("Запустить индексацию"):
 
             os.rename(src, dst)
 
-        # Upgrade the data
+        # Upgrade the backup
         processed_files = []
         load_retrieval_resources(st.session_state["DATA_VERSION"])
         st.success("Индексация завершена.")
