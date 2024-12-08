@@ -77,8 +77,8 @@ def get_answer(query: str, use_gpt: bool = True, topk_for_rag: int = 3):
     info = []
     texts_for_rag = []
     for row in rows_for_rag:
-        d = {'filename': row.filename, 'info': row.n_slide if not np.isnan(row.n_slide) else row.text}
+        d = {'filename': row['filename'], 'info': row['n_slide'] if not np.isnan(row['n_slide']) and row['n_slide'] > -1 else row['text']}
         info.append(d)
-        texts_for_rag.append(row.text)
+        texts_for_rag.append(row['text'])
     answer = get_llm_answer(query, detect_language(query), texts_for_rag) if use_gpt else None
     return info, answer

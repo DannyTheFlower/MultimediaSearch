@@ -17,9 +17,9 @@ if "INITIALIZED" not in st.session_state:
 if "DATA_VERSION" not in st.session_state:
     st.session_state["DATA_VERSION"] = 0
 
-# Load embeddings, index, data, pdf/text processors if not initialized
+# Load embeddings, index, backup, pdf/text processors if not initialized
 if not st.session_state["INITIALIZED"]:
-    with st.spinner('Loading data...'):
+    with st.spinner('Loading backup...'):
         load_retrieval_resources(st.session_state["DATA_VERSION"])
         load_fp_resources()
         st.session_state["INITIALIZED"] = True

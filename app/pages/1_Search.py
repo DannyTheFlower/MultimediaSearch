@@ -9,9 +9,9 @@ from backend.config import config
 @st.cache_data(show_spinner=False)
 def get_answer_and_cache(data_version: int, query: str, use_gpt: bool, top_k: int) -> Tuple[List[Dict], str]:
     """
-    Retrieves the answer and caches it based on the data version and query parameters.
+    Retrieves the answer and caches it based on the backup version and query parameters.
 
-    :param data_version: Version of the data to ensure cache validity.
+    :param data_version: Version of the backup to ensure cache validity.
     :param query: The user's search query.
     :param use_gpt: Flag to determine whether to use GPT for generating the answer.
     :param top_k: Number of top results to retrieve.
