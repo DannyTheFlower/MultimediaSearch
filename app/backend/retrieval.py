@@ -2,14 +2,16 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, PointStruct
-import streamlit as st
-from backend.config import config
+from .config import config
 from typing import Tuple, List, Dict
-import time
 import uuid
+from functools import lru_cache
 
 
-@st.cache_resource(show_spinner=False)
+DATA_VERSION = 0
+
+
+@lru_cache(maxsize=1)
 def load_retrieval_resources(
         data_version: int = 0,
         embedder_name: str = config.EMBEDDER_NAME,
@@ -50,7 +52,7 @@ def find_similar_neighbors(query: str, k: int = 3) -> List[Dict]:
     :param k: Number of neighbors to retrieve.
     :return: List of similar backup entries.
     """
-    client, embedder = load_retrieval_resources(st.session_state["DATA_VERSION"])
+    client, embedder = load_retrieval_resources(DATA_VERSION)
 
     query_vector = embedder.encode([query]).flatten()
     query_vector /= np.linalg.norm(query_vector)
@@ -86,7 +88,8 @@ def index_new_data(data_rows: List[Dict]):
             client.upsert(collection_name=collection_name, points=batch)
             print(f"Upserted batch {i // batch_size + 1} with {len(batch)} points.")
 
-    client, embedder = load_retrieval_resources(st.session_state["DATA_VERSION"])
+    global DATA_VERSION
+    client, embedder = load_retrieval_resources(DATA_VERSION)
 
     new_texts = [row["text"] for row in data_rows]
     new_embeddings = embedder.encode(new_texts, convert_to_numpy=True, batch_size=16)
@@ -110,5 +113,5 @@ def index_new_data(data_rows: List[Dict]):
         )
 
     batch_upsert(client, config.QDRANT_COLLECTION_NAME, points)
-    st.session_state["DATA_VERSION"] += 1
-    load_retrieval_resources(st.session_state["DATA_VERSION"])
+    DATA_VERSION += 1
+    load_retrieval_resources(DATA_VERSION)

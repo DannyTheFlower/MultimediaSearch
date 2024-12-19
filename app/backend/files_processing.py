@@ -1,15 +1,15 @@
-from backend.utils import get_file_extension
-from backend.config import config
-from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
-from easyocr import Reader
+from .utils import get_file_extension
+from .config import config
+from transformers import AutoProcessor
 from qdrant_client import QdrantClient
-import os
 import torch
 import numpy as np
 from PIL import Image
 import fitz
-import streamlit as st
 from typing import List
+from functools import lru_cache
+import easyocr
+from transformers import PaliGemmaForConditionalGeneration
 
 
 class OCRModel:
@@ -17,7 +17,7 @@ class OCRModel:
     Optical Character Recognition (OCR) model using EasyOCR.
     """
     def __init__(self):
-        self.reader = Reader(['en', 'ru'], gpu=torch.cuda.is_available())
+        self.reader = easyocr.Reader(['en', 'ru'], gpu=torch.cuda.is_available())
 
     def extract_text(self, image: Image.Image) -> str:
         """
@@ -59,18 +59,18 @@ class Chart2Text:
         return output_text
 
 
-@st.cache_resource(show_spinner=False)
-def load_ocr():
+@lru_cache(maxsize=1)
+def load_ocr() -> OCRModel:
     """
     Loads the OCR model as a cached resource.
 
     :return: OCRModel instance.
     """
-    return OCRModel
+    return OCRModel()
 
 
-@st.cache_resource(show_spinner=False)
-def load_chart2text():
+@lru_cache(maxsize=1)
+def load_chart2text() -> Chart2Text:
     """
     Loads the Chart2Text model as a cached resource.
 
@@ -79,7 +79,7 @@ def load_chart2text():
     return Chart2Text()
 
 
-@st.cache_resource(show_spinner=False)
+@lru_cache(maxsize=1)
 def load_fp_resources(
     include_ocr: bool = config.INCLUDE_OCR,
     include_chart2text: bool = config.INCLUDE_CHART2TEXT
@@ -91,19 +91,14 @@ def load_fp_resources(
     :param include_chart2text: Flag to include Chart2Text model.
     :return: Loaded resources.
     """
-    if include_ocr and include_chart2text:
-        return load_ocr(), load_chart2text()
-    if include_ocr:
-        return load_ocr(), None
-    if include_chart2text:
-        return None, load_chart2text()
-    return None, None
+    ocr = load_ocr() if include_ocr else None
+    c2t = load_chart2text() if include_chart2text else None
+    return ocr, c2t
 
 
-@st.cache_resource(show_spinner=False)
+@lru_cache(maxsize=1)
 def get_qdrant_client():
     return QdrantClient(host=config.QDRANT_HOST, port=config.QDRANT_PORT)
-
 
 
 def get_text_pieces_from_txt_file(
@@ -153,7 +148,8 @@ def get_text_pieces_from_pdf_file(
             # Use OCR for text extraction if too few characters
             pix = page.get_pixmap(dpi=300)
             img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-            page_text = ocr.extract_text(img)
+            if ocr is not None:
+                page_text = ocr.extract_text(img)
             if len(page_text.strip()) < too_few_chars and chart2text is not None:
                 # Use CHART2TEXT if still too few characters
                 page_text = chart2text.extract_text(img)
@@ -167,7 +163,7 @@ def prepare_filedata_for_qdrant(
         chunk_size: int = config.CHUNK_SIZE,
         overlap: int = config.OVERLAP
 ):
-    filename = os.path.basename(filepath_from)
+    filename = filepath_from.split('/')[-1]
     extension = get_file_extension(filename)
     if extension == '.txt':
         text_pieces = get_text_pieces_from_txt_file(filepath_from, chunk_size, overlap)

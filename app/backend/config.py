@@ -1,5 +1,5 @@
 from pathlib import Path
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Config(BaseSettings):
@@ -25,9 +25,15 @@ class Config(BaseSettings):
     # Qdrant settings
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
-    QDRANT_COLLECTION_NAME: str = "multimedia_data"
+    QDRANT_COLLECTION_NAME: str = "multimedia_data_dev"
     VECTOR_SIZE: int = 1024
     DISTANCE: str = "Cosine"
+
+    # LLM settings
+    LLM_MODEL_NAME: str = "YOUR_MODEL_NAME"
+    LLM_IAM_TOKEN: str = "YOUR_TOKEN"
+
+    model_config = SettingsConfigDict(env_file=PROJECT_ROOT + '/.env', env_file_encoding='utf-8')
 
 
 config = Config()

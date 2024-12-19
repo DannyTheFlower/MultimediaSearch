@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="page-title">Добавление новых файлов</h1>
+<form action="/upload" method="post" enctype="multipart/form-data" class="form-section">
+    <label class="form-label">Выберите PDF или TXT файлы для загрузки:</label>
+    <input type="file" name="files" multiple class="form-input">
+    <button type="submit" class="btn btn-primary">Загрузить файлы</button>
+</form>
+
+{% if uploaded_files %}
+    <div class="success-block">
+        <h2 class="section-title">Файлы успешно загружены и обработаны:</h2>
+        <ul>
+        {% for f in uploaded_files %}
+            <li>{{ f }}</li>
+        {% endfor %}
+        </ul>
+    </div>
+{% endif %}
+
+{% if warning %}
+    <div class="warning-block">{{ warning }}</div>
+{% endif %}
+{% if error %}
+    <div class="error-block">{{ error }}</div>
+{% endif %}
+{% if success %}
+    <div class="success-block">{{ success }}</div>
+{% endif %}
+
+{% if indexing %}
+    <p class="info-text">Индексация уже запущена. Пожалуйста, подождите.</p>
+{% else %}
+<form action="/index" method="post" class="form-section">
+    <button type="submit" class="btn btn-secondary">Запустить индексацию</button>
+</form>
+{% endif %}
+{% endblock %}

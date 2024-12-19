@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title if title else "Поиск-бот для Media Wise" }}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+</head>
+<body class="dark-theme">
+    <div class="container">
+        <aside class="sidebar">
+            <h2 class="sidebar-title">Media Wise</h2>
+            <nav>
+                <a href="/" class="nav-link">Главная</a>
+                <a href="/search" class="nav-link">Поиск</a>
+                <a href="/upload" class="nav-link">Загрузка файлов</a>
+            </nav>
+        </aside>
+        <main class="main-content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    <script src="/static/script.js"></script>
+</body>
+</html>
