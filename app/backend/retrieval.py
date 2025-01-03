@@ -17,7 +17,8 @@ def load_retrieval_resources(
         embedder_name: str = config.EMBEDDER_NAME,
         qdrant_host: str = config.QDRANT_HOST,
         qdrant_port: int = config.QDRANT_PORT,
-        qdrant_collection_name: str = config.QDRANT_COLLECTION_NAME,
+        qdrant_text_collection: str = config.QDRANT_TEXT_COLLECTION,
+        qdrant_caption_collection: str = config.QDRANT_CAPTION_COLLECTION,
         dim: int = config.VECTOR_SIZE,
         distance: str = config.DISTANCE,
 ) -> Tuple[QdrantClient, SentenceTransformer]:
@@ -34,9 +35,14 @@ def load_retrieval_resources(
     :return: Tuple containing qdrant client and embedder.
     """
     client = QdrantClient(host=qdrant_host, port=qdrant_port)
-    if not client.collection_exists(qdrant_collection_name):
+    if not client.collection_exists(qdrant_text_collection):
         client.create_collection(
-            collection_name=qdrant_collection_name,
+            collection_name=qdrant_text_collection,
+            vectors_config=VectorParams(size=dim, distance=distance)
+        )
+    if not client.collection_exists(qdrant_caption_collection):
+        client.create_collection(
+            collection_name=qdrant_caption_collection,
             vectors_config=VectorParams(size=dim, distance=distance)
         )
 
@@ -57,21 +63,42 @@ def find_similar_neighbors(query: str, k: int = 3) -> List[Dict]:
     query_vector = embedder.encode([query]).flatten()
     query_vector /= np.linalg.norm(query_vector)
 
-    qdrant_client = QdrantClient(host=config.QDRANT_HOST, port=config.QDRANT_PORT)
-    search_results = qdrant_client.search(
-        collection_name=config.QDRANT_COLLECTION_NAME,
+    # Stage 1: searching among text on slides
+    search_results = client.search(
+        collection_name=config.QDRANT_TEXT_COLLECTION,
         query_vector=query_vector.tolist(),
-        limit=k
+        limit=k,
     )
-
     neighbors = []
     for res in search_results:
         doc = {
             "filename": res.payload.get("filename", ""),
             "n_slide": res.payload.get("n_slide", None),
-            "text": res.payload.get("text", "")
+            "text": res.payload.get("text", ""),
+            "score": res.score,
+            "source": "text_collection",
         }
         neighbors.append(doc)
+
+    # Stage 2: if there are not enough good results, we're searching among extracted descriptions
+    neighbors = list(filter(lambda x: x["score"] > config.THRESHOLD, neighbors))
+    if len(neighbors) < k:
+        captions_search_results = client.search(
+            collection_name=config.QDRANT_CAPTION_COLLECTION,
+            query_vector=query_vector.tolist(),
+            limit=k - len(neighbors),
+        )
+        for res in captions_search_results:
+            doc = {
+                "filename": res.payload.get("filename", ""),
+                "n_slide": res.payload.get("n_slide", None),
+                "text": res.payload.get("text", ""),
+                "score": res.score,
+                "source": "caption_collection",
+            }
+            neighbors.append(doc)
+
+    print("scores:", ', '.join([str(n["score"]) for n in neighbors]))
     return neighbors
 
 
@@ -99,10 +126,9 @@ def index_new_data(data_rows: List[Dict]):
     for i, row in enumerate(data_rows):
         payload = {
             "filename": row["filename"],
+            "n_slide": row["n_slide"],
             "text": row["text"]
         }
-        if row.get("n_slide") is not None:
-            payload["n_slide"] = row["n_slide"]
 
         points.append(
             PointStruct(

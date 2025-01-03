@@ -8,14 +8,13 @@ class Config(BaseSettings):
     # Paths
     UPLOAD_FOLDER: str = PROJECT_ROOT + "/uploaded_files"
     MEDIA_FOLDER: str = PROJECT_ROOT + "/media"
-    QDRANT_BACKUP: str = PROJECT_ROOT + "/app/backend/backup/qdrant_backup.snapshot"
 
     # Model
     EMBEDDER_NAME: str = "deepvk/USER-bge-m3"
 
     # OCR and Chart2Text Options
     INCLUDE_OCR: bool = True
-    INCLUDE_CHART2TEXT: bool = False
+    INCLUDE_VLM: bool = False
 
     # Other constants
     CHUNK_SIZE: int = 250
@@ -25,7 +24,9 @@ class Config(BaseSettings):
     # Qdrant settings
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
-    QDRANT_COLLECTION_NAME: str = "multimedia_data_dev"
+    QDRANT_TEXT_COLLECTION: str = "multimedia_data_text"
+    QDRANT_CAPTION_COLLECTION: str = "multimedia_data_captions"
+    THRESHOLD: float = 0.5
     VECTOR_SIZE: int = 1024
     DISTANCE: str = "Cosine"
 

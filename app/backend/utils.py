@@ -37,7 +37,7 @@ def get_file_extension(text: str) -> str:
 def migrate_to_qdrant(
         data: pd.DataFrame,
         embeddings: np.ndarray,
-        collection_name: str = "multimedia_data",
+        collection_name: str = "multimedia_data_text",
         host: str = "localhost",
         port: int = 6333,
         batch_size: int = 100,

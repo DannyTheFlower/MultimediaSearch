@@ -20,7 +20,7 @@ body.dark-theme {
 }
 
 .sidebar-title {
-    color: #4CAF50;
+    color: #FFFFFF;
     font-size: 1.4em;
     margin-bottom: 1em;
     text-transform: uppercase;
@@ -54,7 +54,7 @@ body.dark-theme {
 .page-title {
     font-size: 2em;
     margin-bottom: 0.5em;
-    color: #4CAF50;
+    color: #FFFFFF;
     letter-spacing: 1px;
 }
 
@@ -62,7 +62,7 @@ body.dark-theme {
     font-size: 1.5em;
     margin-top: 1em;
     margin-bottom: 0.5em;
-    color: #4CAF50;
+    color: #FFFFFF;
 }
 
 .description, .info-text {
@@ -138,7 +138,7 @@ body.dark-theme {
     background: #4CAF50;
 }
 .btn-primary:hover {
-    background: #45a047;
+    background: #45A047;
 }
 
 .btn-secondary {
