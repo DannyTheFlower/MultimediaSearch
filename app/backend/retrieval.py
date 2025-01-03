@@ -2,20 +2,23 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, PointStruct
-import streamlit as st
-from backend.config import config
+from .config import config
 from typing import Tuple, List, Dict
-import time
 import uuid
+from functools import lru_cache
 
 
-@st.cache_resource(show_spinner=False)
+DATA_VERSION = 0
+
+
+@lru_cache(maxsize=1)
 def load_retrieval_resources(
         data_version: int = 0,
         embedder_name: str = config.EMBEDDER_NAME,
         qdrant_host: str = config.QDRANT_HOST,
         qdrant_port: int = config.QDRANT_PORT,
-        qdrant_collection_name: str = config.QDRANT_COLLECTION_NAME,
+        qdrant_text_collection: str = config.QDRANT_TEXT_COLLECTION,
+        qdrant_caption_collection: str = config.QDRANT_CAPTION_COLLECTION,
         dim: int = config.VECTOR_SIZE,
         distance: str = config.DISTANCE,
 ) -> Tuple[QdrantClient, SentenceTransformer]:
@@ -32,9 +35,14 @@ def load_retrieval_resources(
     :return: Tuple containing qdrant client and embedder.
     """
     client = QdrantClient(host=qdrant_host, port=qdrant_port)
-    if not client.collection_exists(qdrant_collection_name):
+    if not client.collection_exists(qdrant_text_collection):
         client.create_collection(
-            collection_name=qdrant_collection_name,
+            collection_name=qdrant_text_collection,
+            vectors_config=VectorParams(size=dim, distance=distance)
+        )
+    if not client.collection_exists(qdrant_caption_collection):
+        client.create_collection(
+            collection_name=qdrant_caption_collection,
             vectors_config=VectorParams(size=dim, distance=distance)
         )
 
@@ -50,26 +58,47 @@ def find_similar_neighbors(query: str, k: int = 3) -> List[Dict]:
     :param k: Number of neighbors to retrieve.
     :return: List of similar backup entries.
     """
-    client, embedder = load_retrieval_resources(st.session_state["DATA_VERSION"])
+    client, embedder = load_retrieval_resources(DATA_VERSION)
 
     query_vector = embedder.encode([query]).flatten()
     query_vector /= np.linalg.norm(query_vector)
 
-    qdrant_client = QdrantClient(host=config.QDRANT_HOST, port=config.QDRANT_PORT)
-    search_results = qdrant_client.search(
-        collection_name=config.QDRANT_COLLECTION_NAME,
+    # Stage 1: searching among text on slides
+    search_results = client.search(
+        collection_name=config.QDRANT_TEXT_COLLECTION,
         query_vector=query_vector.tolist(),
-        limit=k
+        limit=k,
     )
-
     neighbors = []
     for res in search_results:
         doc = {
             "filename": res.payload.get("filename", ""),
             "n_slide": res.payload.get("n_slide", None),
-            "text": res.payload.get("text", "")
+            "text": res.payload.get("text", ""),
+            "score": res.score,
+            "source": "text_collection",
         }
         neighbors.append(doc)
+
+    # Stage 2: if there are not enough good results, we're searching among extracted descriptions
+    neighbors = list(filter(lambda x: x["score"] > config.THRESHOLD, neighbors))
+    if len(neighbors) < k:
+        captions_search_results = client.search(
+            collection_name=config.QDRANT_CAPTION_COLLECTION,
+            query_vector=query_vector.tolist(),
+            limit=k - len(neighbors),
+        )
+        for res in captions_search_results:
+            doc = {
+                "filename": res.payload.get("filename", ""),
+                "n_slide": res.payload.get("n_slide", None),
+                "text": res.payload.get("text", ""),
+                "score": res.score,
+                "source": "caption_collection",
+            }
+            neighbors.append(doc)
+
+    print("scores:", ', '.join([str(n["score"]) for n in neighbors]))
     return neighbors
 
 
@@ -86,7 +115,8 @@ def index_new_data(data_rows: List[Dict]):
             client.upsert(collection_name=collection_name, points=batch)
             print(f"Upserted batch {i // batch_size + 1} with {len(batch)} points.")
 
-    client, embedder = load_retrieval_resources(st.session_state["DATA_VERSION"])
+    global DATA_VERSION
+    client, embedder = load_retrieval_resources(DATA_VERSION)
 
     new_texts = [row["text"] for row in data_rows]
     new_embeddings = embedder.encode(new_texts, convert_to_numpy=True, batch_size=16)
@@ -96,10 +126,9 @@ def index_new_data(data_rows: List[Dict]):
     for i, row in enumerate(data_rows):
         payload = {
             "filename": row["filename"],
+            "n_slide": row["n_slide"],
             "text": row["text"]
         }
-        if row.get("n_slide") is not None:
-            payload["n_slide"] = row["n_slide"]
 
         points.append(
             PointStruct(
@@ -110,5 +139,5 @@ def index_new_data(data_rows: List[Dict]):
         )
 
     batch_upsert(client, config.QDRANT_COLLECTION_NAME, points)
-    st.session_state["DATA_VERSION"] += 1
-    load_retrieval_resources(st.session_state["DATA_VERSION"])
+    DATA_VERSION += 1
+    load_retrieval_resources(DATA_VERSION)

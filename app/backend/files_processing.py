@@ -1,15 +1,14 @@
-from backend.utils import get_file_extension
-from backend.config import config
-from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
-from easyocr import Reader
+from .utils import get_file_extension
+from .config import config
 from qdrant_client import QdrantClient
-import os
 import torch
 import numpy as np
 from PIL import Image
 import fitz
-import streamlit as st
 from typing import List
+from functools import lru_cache
+import easyocr
+from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
 
 
 class OCRModel:
@@ -17,7 +16,7 @@ class OCRModel:
     Optical Character Recognition (OCR) model using EasyOCR.
     """
     def __init__(self):
-        self.reader = Reader(['en', 'ru'], gpu=torch.cuda.is_available())
+        self.reader = easyocr.Reader(['en', 'ru'], gpu=torch.cuda.is_available())
 
     def extract_text(self, image: Image.Image) -> str:
         """
@@ -32,78 +31,77 @@ class OCRModel:
         return text
 
 
-class Chart2Text:
+class VLM:
     """
     Model to extract textual descriptions from charts.
     """
     def __init__(self):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = PaliGemmaForConditionalGeneration.from_pretrained("ahmed-masry/chartgemma",
-                                                                       torch_dtype=torch.float16).to(self.device)
-        self.processor = AutoProcessor.from_pretrained("ahmed-masry/chartgemma")
+        self.model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-vicuna-7b-hf",
+                                                                       torch_dtype=torch.float16,
+                                                                       low_cpu_mem_usage=True,
+                                                                       load_in_4bit=True).to(self.device)
+        self.processor = LlavaNextProcessor.from_pretrained("llava-hf/llava-v1.6-vicuna-7b-hf")
+        self.prompt = (
+            "You are a helpful assistant that describes slides in a presentation.\n"
+            "USER:<image>\nDescribe this presentation slide in great detail. "
+            "The slide may contain text, charts, diagrams, images. "
+            "You should describe every separate part you can find. "
+            "Ignore cyrillic symbols.\nASSISTANT:"
+        )
 
-    def extract_text(self, image: Image.Image) -> str:
+    def generate_text(self, image: Image.Image) -> str:
         """
-        Extracts text from a chart image using Chart2Text model.
+        Extracts text from a chart image using VL model.
 
         :param image: PIL Image of the chart.
         :return: Extracted text description.
         """
-        input_text = "program of thought: describe the chart in great detail"
-        inputs = self.processor(text=input_text, images=image, return_tensors="pt").to(self.device)
-        prompt_length = inputs['input_ids'].shape[1]
-        generate_ids = self.model.generate(**inputs, num_beams=4, max_new_tokens=512)
-        output_text = self.processor.batch_decode(
-            generate_ids[:, prompt_length:], skip_special_tokens=True, clean_up_tokenization_spaces=False
-        )[0]
-        return output_text
+        inputs = self.processor(images=image, text=self.prompt, return_tensors="pt").to("cuda")
+        caption = self.model.generate(**inputs, max_new_tokens=512)
+        return self.processor.decode(caption[0], skip_special_tokens=True).split("ASSISTANT:")[-1].strip()
 
 
-@st.cache_resource(show_spinner=False)
-def load_ocr():
+@lru_cache(maxsize=1)
+def load_ocr() -> OCRModel:
     """
     Loads the OCR model as a cached resource.
 
     :return: OCRModel instance.
     """
-    return OCRModel
+    return OCRModel()
 
 
-@st.cache_resource(show_spinner=False)
-def load_chart2text():
+@lru_cache(maxsize=1)
+def load_vlm() -> VLM:
     """
-    Loads the Chart2Text model as a cached resource.
+    Loads the VL model as a cached resource.
 
-    :return: Chart2Text instance.
+    :return: VLM instance.
     """
-    return Chart2Text()
+    return VLM()
 
 
-@st.cache_resource(show_spinner=False)
+@lru_cache(maxsize=1)
 def load_fp_resources(
     include_ocr: bool = config.INCLUDE_OCR,
-    include_chart2text: bool = config.INCLUDE_CHART2TEXT
+    include_vlm: bool = config.INCLUDE_VLM
 ):
     """
     Loads file processing resources based on the configuration.
 
     :param include_ocr: Flag to include OCR model.
-    :param include_chart2text: Flag to include Chart2Text model.
+    :param include_vlm: Flag to include VL model.
     :return: Loaded resources.
     """
-    if include_ocr and include_chart2text:
-        return load_ocr(), load_chart2text()
-    if include_ocr:
-        return load_ocr(), None
-    if include_chart2text:
-        return None, load_chart2text()
-    return None, None
+    ocr = load_ocr() if include_ocr else None
+    vlm = load_vlm() if include_vlm else None
+    return ocr, vlm
 
 
-@st.cache_resource(show_spinner=False)
+@lru_cache(maxsize=1)
 def get_qdrant_client():
     return QdrantClient(host=config.QDRANT_HOST, port=config.QDRANT_PORT)
-
 
 
 def get_text_pieces_from_txt_file(
@@ -143,7 +141,7 @@ def get_text_pieces_from_pdf_file(
     :param too_few_chars: Threshold for using OCR or Chart2Text.
     :return: List of text pieces.
     """
-    ocr, chart2text = load_fp_resources()
+    ocr, vlm = load_fp_resources()
 
     doc = fitz.open(filepath)
     text_pieces = []
@@ -153,10 +151,11 @@ def get_text_pieces_from_pdf_file(
             # Use OCR for text extraction if too few characters
             pix = page.get_pixmap(dpi=300)
             img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-            page_text = ocr.extract_text(img)
-            if len(page_text.strip()) < too_few_chars and chart2text is not None:
-                # Use CHART2TEXT if still too few characters
-                page_text = chart2text.extract_text(img)
+            if ocr is not None:
+                page_text = ocr.extract_text(img)
+            if len(page_text.strip()) < too_few_chars and vlm is not None:
+                # Use VLM description generation if still too few characters
+                page_text = vlm.generate_text(img)
         text_pieces.append(page_text)
     return text_pieces
 
@@ -167,7 +166,7 @@ def prepare_filedata_for_qdrant(
         chunk_size: int = config.CHUNK_SIZE,
         overlap: int = config.OVERLAP
 ):
-    filename = os.path.basename(filepath_from)
+    filename = filepath_from.split('/')[-1]
     extension = get_file_extension(filename)
     if extension == '.txt':
         text_pieces = get_text_pieces_from_txt_file(filepath_from, chunk_size, overlap)

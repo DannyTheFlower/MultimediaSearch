@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="page-title">Поисковый бот для рекламного агентства</h1>
+<h2 class="section-title">Поиск информации</h2>
+<form method="post" action="/search" class="form-section" id="search-form">
+    <label for="query" class="form-label">Введите ваш вопрос:</label>
+    <input type="text" name="query" id="query" value="{{ query }}" class="form-input" placeholder="Например: Steve Jobs">
+
+    <div class="form-options">
+        <button type="submit" class="btn btn-primary">Поиск <i class="fa fa-search"></i></button>
+        <label class="checkbox-label">
+            <input type="checkbox" name="use_gpt" {% if use_gpt %}checked{% endif %}>
+            Использовать GPT
+        </label>
+        <label class="select-label">Количество ответов:
+            <select name="top_k" class="form-select">
+                {% for k in [1,2,3,4,5] %}
+                    <option value="{{k}}" {% if k == top_k %}selected{% endif %}>{{k}}</option>
+                {% endfor %}
+            </select>
+        </label>
+    </div>
+</form>
+
+<div id="results-container">
+    {% if results %}
+        {% set result_list, llm_response = results %}
+        {% if llm_response %}
+            <h2 class="section-title">Ответ:</h2>
+            <div class="answer-block" id="llm-response">{{ llm_response }}</div>
+        {% endif %}
+
+        <h2 class="section-title">Найденные результаты:</h2>
+        <div class="nav-buttons">
+            <button id="prev-result" class="btn btn-secondary">← Предыдущий</button>
+            <button id="next-result" class="btn btn-secondary">Следующий →</button>
+        </div>
+        <div id="result-viewer" class="result-block"></div>
+    {% else %}
+        <!-- Нет данных -->
+    {% endif %}
+</div>
+{% endblock %}
